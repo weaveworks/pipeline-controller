@@ -1,6 +1,7 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= weaveworks/pipeline-controller:latest
+IMG_TAG ?= latest
+IMG ?= ghcr.io/weaveworks/pipeline-controller:$(IMG_TAG)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -11,6 +12,8 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 # GOPRIVATE = github.com/weaveworks/cluster-controller
+
+DOCKER_BUILD_ARGS ?= --load
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
@@ -71,11 +74,15 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build --load --secret id=netrc,src=.netrc -t ${IMG} .
+	docker build --secret id=netrc,src=.netrc -t ${IMG} $(DOCKER_BUILD_ARGS) .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+docker-push: DOCKER_BUILD_ARGS=--push --platform linux/arm64/v8,linux/amd64
+docker-push: docker-build
+
+.PHONY: release
+release: IMG_TAG=$(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
+release: docker-push
 
 ##@ Deployment
 
