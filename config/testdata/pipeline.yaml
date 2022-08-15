@@ -11,3 +11,9 @@ spec:
           clusterRef:
             kind: GitopsCluster
             name: dev
+    - name: prod
+      targets:
+        - namespace: podinfo
+          clusterRef:
+            kind: GitopsCluster
+            name: prod

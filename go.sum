@@ -142,8 +142,12 @@ github.com/evanphx/json-patch v4.12.0+incompatible h1:4onqiflcdA9EOZ4RxV643DvftH
 github.com/evanphx/json-patch v4.12.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/felixge/httpsnoop v1.0.1/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/fluxcd/pkg/apis/meta v0.12.1 h1:m5PfKAqbqWBvGp9+JRj1sv+xNkGsHwUVf+3rJ8wm6SE=
-github.com/fluxcd/pkg/apis/meta v0.12.1/go.mod h1:f8YVt70/KAhqzZ7xxhjvqyzKubOYx2pAbakb/FfCEg8=
+github.com/fluxcd/helm-controller/api v0.22.2 h1:nh0GZBsUE0gNzm4PmPa4aOoqYlbZbpGt2pcIL9S2184=
+github.com/fluxcd/helm-controller/api v0.22.2/go.mod h1:GfD9TFgLyn81VgwZN1yM47/aUdz0SwTSyRAGmC8xZ+c=
+github.com/fluxcd/pkg/apis/kustomize v0.4.1 h1:YgIF9TJ23pH66W/gYlEu+DeH1pU3tS4xYlRc5AQzk58=
+github.com/fluxcd/pkg/apis/kustomize v0.4.1/go.mod h1:U9rfSgDHaQd74PgPKt9DprtuzT+i1m18zlHxatq7c5Y=
+github.com/fluxcd/pkg/apis/meta v0.14.1 h1:lPDs9yV67DnwalHPb13bbnDkAatALfUiAMRHjUm4UBw=
+github.com/fluxcd/pkg/apis/meta v0.14.1/go.mod h1:1uJkTJGSZWrZxL5PFpx1IxGLrFmT1Cd0C2fFWrbv77I=
 github.com/form3tech-oss/jwt-go v3.2.2+incompatible/go.mod h1:pbq4aXjuKjdthFRnoDwaVPLA+WlJuPGy+QneDUgJi2k=
 github.com/form3tech-oss/jwt-go v3.2.3+incompatible h1:7ZaBxOI7TMoYBfyA3cQHErNNyAWIKUMIwqxEtgHOs5c=
 github.com/form3tech-oss/jwt-go v3.2.3+incompatible/go.mod h1:pbq4aXjuKjdthFRnoDwaVPLA+WlJuPGy+QneDUgJi2k=
@@ -951,7 +955,6 @@ gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
-gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
 gopkg.in/errgo.v2 v2.1.0/go.mod h1:hNsd1EY+bozCKY1Ytp96fpM3vjJbqLJn88ws8XvfDNI=
 gopkg.in/fsnotify.v1 v1.4.7/go.mod h1:Tz8NjZHkW78fSQdbUxIjBTcgA1z1m8ZHf0WmKUhAMys=
 gopkg.in/inf.v0 v0.9.1 h1:73M5CoZyi3ZLMOyDlQh031Cx6N9NDJ2Vvfl76EDAgDc=
