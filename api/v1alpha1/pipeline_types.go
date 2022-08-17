@@ -44,16 +44,20 @@ type PipelineSpec struct {
 }
 
 type Environment struct {
+	// Name name of the environment.
 	// +required
-	Name    string   `json:"name"`
+	Name string `json:"name"`
+	// Targets list of target that consists of combination of Namespace and Cluster.
 	Targets []Target `json:"targets"`
 }
 
 type Target struct {
-	// +required
-	Namespace string `json:"namespace"`
+	// ClusterRef references a cluster.
 	// +required
 	ClusterRef CrossNamespaceSourceReference `json:"clusterRef"`
+	// Namespace namespace where the ClusterRef is defined.
+	// +required
+	Namespace string `json:"namespace"`
 }
 
 type PipelineStatus struct {
