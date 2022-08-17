@@ -1,0 +1,12 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.0
+# ignores vulnerabilities until expiry date; change duration by modifying expiry date
+ignore:
+  SNYK-GOLANG-GITHUBCOMEMICKLEIGORESTFUL-2435653:
+    - '*':
+        reason: >-
+          Waiting for upstream dependency to be resolved
+          https://github.com/kubernetes/client-go/issues/1135
+        expires: 2022-09-21T11:42:12.847Z
+        created: 2022-08-22T11:42:12.850Z
+patch: {}

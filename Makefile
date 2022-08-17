@@ -1,7 +1,8 @@
 
 # Image URL to use all building/pushing image targets
-IMG_TAG ?= latest
-IMG ?= ghcr.io/weaveworks/pipeline-controller:$(IMG_TAG)
+IMG_TAG ?= $(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
+IMG_REGISTRY ?= ghcr.io
+IMG ?= $(IMG_REGISTRY)/weaveworks/pipeline-controller:$(IMG_TAG)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -14,6 +15,11 @@ endif
 # GOPRIVATE = github.com/weaveworks/cluster-controller
 
 DOCKER_BUILD_ARGS ?= --load
+DOCKER_BUILD_LABELS ?= --label org.opencontainers.image.created=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ") \
+	--label org.opencontainers.image.authors="Weaveworks Product Engineering" \
+	--label org.opencontainers.image.source=github.com/weaveworks/pipeline-controller \
+	--label org.opencontainers.image.revision=$(IMG_TAG) \
+	--label org.opencontainers.image.vendor=Weaveworks
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
@@ -58,6 +64,9 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+lint: golangci-lint ## Run linters against code
+	$(GOLANGCI_LINT) run --out-format=github-actions --timeout 600s
+
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
@@ -74,7 +83,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build --secret id=netrc,src=.netrc -t ${IMG} $(DOCKER_BUILD_ARGS) .
+	docker buildx build --secret id=netrc,src=.netrc -t ${IMG} $(DOCKER_BUILD_ARGS) $(DOCKER_BUILD_LABELS) .
 
 .PHONY: docker-push
 docker-push: DOCKER_BUILD_ARGS=--push --platform linux/arm64/v8,linux/amd64
@@ -118,10 +127,12 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v4.5.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
+GOLANGCI_LINT_VERSION ?= v1.48.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -138,3 +149,8 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT)
+$(GOLANGCI_LINT): $(LOCALBIN)
+	test -s $(LOCALBIN)/golangci-lint || GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
