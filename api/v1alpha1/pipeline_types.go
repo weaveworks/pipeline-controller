@@ -43,16 +43,6 @@ type PipelineSpec struct {
 	Environments []Environment `json:"environments"`
 }
 
-type PipelineStatus struct {
-	// ObservedGeneration is the last observed generation.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Conditions holds the conditions for the Pipeline.
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
 type Environment struct {
 	// +required
 	Name    string   `json:"name"`
@@ -64,6 +54,41 @@ type Target struct {
 	Namespace string `json:"namespace"`
 	// +required
 	ClusterRef CrossNamespaceSourceReference `json:"clusterRef"`
+}
+
+type PipelineStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the Pipeline.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Environments holds the current status of all environments.
+	// +optional
+	Environments []EnvironmentStatus `json:"environments"`
+}
+
+type EnvironmentStatus struct {
+	// Name environment name.
+	// +required
+	Name string `json:"name"`
+
+	// TargetsStatus status of all targets defined in this Environment.
+	TargetsStatus []TargetStatus `json:"targetsStatus,omitempty"`
+}
+
+type TargetStatus struct {
+	// ClusterRef references a cluster.
+	// +required
+	ClusterRef CrossNamespaceSourceReference `json:"clusterRef"`
+	// Namespace namespace where the ClusterRef is defined.
+	// +required
+	Namespace string `json:"namespace"`
+	// Workloads holds helm releases and kustomization that belongs to this target.
+	// +optional
+	Workloads []CrossNamespaceSourceReference `json:"workloads,omitempty"`
 }
 
 func (t Target) String() string {

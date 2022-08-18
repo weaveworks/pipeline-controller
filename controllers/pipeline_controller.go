@@ -64,7 +64,11 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	envsStatuses := []v1alpha1.EnvironmentStatus{}
+
 	for _, env := range pipeline.Spec.Environments {
+		envStatus := v1alpha1.EnvironmentStatus{Name: env.Name}
+
 		for _, target := range env.Targets {
 			cluster, err := r.getCluster(ctx, pipeline, target.ClusterRef)
 			if err != nil {
@@ -111,6 +115,8 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				return ctrl.Result{}, err
 			}
 
+			logger.Info("Listing HelmReleases", "pipeline", pipeline.Name, "namespace", target.Namespace)
+
 			var hrs helmctrlv2beta1.HelmReleaseList
 			if err := targetClient.List(ctx, &hrs,
 				client.InNamespace(target.Namespace),
@@ -124,8 +130,15 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				return ctrl.Result{}, err
 			}
 			logger.Info("Got HelmReleases", "target", target, "HelmReleaseList", hrs)
+
+			envStatus.TargetsStatus = append(envStatus.TargetsStatus,
+				v1alpha1.TargetStatus{Namespace: target.Namespace, ClusterRef: target.ClusterRef, Workloads: helmReleaseListToWorkloads(hrs)})
 		}
+
+		envsStatuses = append(envsStatuses, envStatus)
 	}
+
+	pipeline.Status.Environments = envsStatuses
 
 	newCondition := metav1.Condition{
 		Type:    meta.ReadyCondition,
@@ -224,4 +237,18 @@ func trimString(str string, limit int) string {
 	}
 
 	return str[0:limit] + "..."
+}
+
+func helmReleaseListToWorkloads(hrs helmctrlv2beta1.HelmReleaseList) []v1alpha1.CrossNamespaceSourceReference {
+	workloads := []v1alpha1.CrossNamespaceSourceReference{}
+	for _, hr := range hrs.Items {
+		workloads = append(workloads, v1alpha1.CrossNamespaceSourceReference{
+			APIVersion: hr.APIVersion,
+			Kind:       hr.Kind,
+			Name:       hr.Name,
+			Namespace:  hr.Namespace,
+		})
+	}
+
+	return workloads
 }

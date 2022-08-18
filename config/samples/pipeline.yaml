@@ -1,19 +1,19 @@
 apiVersion: pipelines.weave.works/v1alpha1
 kind: Pipeline
 metadata:
-  name: my-app
+  name: podinfo
   namespace: default
 spec:
   environments:
     - name: dev
       targets:
-        - namespace: podinfo
+        - namespace: default
           clusterRef:
             kind: GitopsCluster
             name: dev
-    - name: prod
-      targets:
-        - namespace: podinfo
-          clusterRef:
-            kind: GitopsCluster
-            name: prod
+    # - name: prod
+    #   targets:
+    #     - namespace: podinfo
+    #       clusterRef:
+    #         kind: GitopsCluster
+    #         name: prod
