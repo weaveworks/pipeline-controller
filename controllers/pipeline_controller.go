@@ -115,7 +115,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				return ctrl.Result{}, err
 			}
 
-			logger.Info("Listing HelmReleases", "pipeline", pipeline.Name, "namespace", target.Namespace)
+			logger.Info("Listing HelmReleases", "pipeline", client.ObjectKeyFromObject(&pipeline).String())
 
 			var hrs helmctrlv2beta1.HelmReleaseList
 			if err := targetClient.List(ctx, &hrs,
