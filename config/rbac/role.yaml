@@ -6,6 +6,22 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gitops.weave.works
+  resources:
+  - gitopsclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - pipelines.weave.works
   resources:
   - pipelines

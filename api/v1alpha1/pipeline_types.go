@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,6 +64,10 @@ type Target struct {
 	Namespace string `json:"namespace"`
 	// +required
 	ClusterRef CrossNamespaceSourceReference `json:"clusterRef"`
+}
+
+func (t Target) String() string {
+	return fmt.Sprintf("%s_%s", t.ClusterRef.String(), t.Namespace)
 }
 
 func init() {
