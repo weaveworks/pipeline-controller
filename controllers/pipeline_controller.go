@@ -33,7 +33,7 @@ type PipelineReconciler struct {
 
 func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
-	helmctrlv2beta1.AddToScheme(targetScheme)
+	_ = helmctrlv2beta1.AddToScheme(targetScheme)
 	return &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
