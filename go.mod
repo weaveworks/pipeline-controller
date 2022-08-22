@@ -4,6 +4,8 @@ go 1.19
 
 replace github.com/weaveworks/pipeline-controller/api => ./api
 
+replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 v3.0.0
+
 require (
 	github.com/fluxcd/helm-controller/api v0.22.2
 	github.com/fluxcd/pkg/apis/meta v0.14.1
