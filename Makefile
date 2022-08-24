@@ -3,6 +3,7 @@
 IMG_TAG ?= $(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
 IMG_REGISTRY ?= ghcr.io
 IMG ?= $(IMG_REGISTRY)/weaveworks/pipeline-controller:$(IMG_TAG)
+GIT_REVISION ?= $(shell echo $$(git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty))
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -18,7 +19,8 @@ DOCKER_BUILD_ARGS ?= --load
 DOCKER_BUILD_LABELS ?= --label org.opencontainers.image.created=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ") \
 	--label org.opencontainers.image.authors="Weaveworks Product Engineering" \
 	--label org.opencontainers.image.source=github.com/weaveworks/pipeline-controller \
-	--label org.opencontainers.image.revision=$(IMG_TAG) \
+	--label org.opencontainers.image.version=$(IMG_TAG) \
+	--label org.opencontainers.image.revision=$(GIT_REVISION) \
 	--label org.opencontainers.image.vendor=Weaveworks
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
