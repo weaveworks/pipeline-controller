@@ -2,9 +2,25 @@ package v1alpha1
 
 import "fmt"
 
+// LocalAppReference is used together with a Target to find a single instance of an application on a certain cluster.
+type LocalAppReference struct {
+	// API version of the referent.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the referent.
+	// +kubebuilder:validation:Enum=HelmRelease
+	// +required
+	Kind string `json:"kind"`
+
+	// Name of the referent.
+	// +required
+	Name string `json:"name"`
+}
+
 // CrossNamespaceClusterReference contains enough information to let you locate the
 // typed Kubernetes resource object at cluster level.
-type CrossNamespaceSourceReference struct {
+type CrossNamespaceClusterReference struct {
 	// API version of the referent.
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
@@ -23,7 +39,7 @@ type CrossNamespaceSourceReference struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-func (s *CrossNamespaceSourceReference) String() string {
+func (s *CrossNamespaceClusterReference) String() string {
 	if s.Namespace != "" {
 		return fmt.Sprintf("%s/%s/%s", s.Kind, s.Namespace, s.Name)
 	}

@@ -4,16 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	helmctrlv2beta1 "github.com/fluxcd/helm-controller/api/v2beta1"
-	"github.com/fluxcd/pkg/apis/meta"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -21,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/pkg/conditions"
 )
 
 // PipelineReconciler reconciles a Pipeline object
@@ -33,7 +30,6 @@ type PipelineReconciler struct {
 
 func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
-	_ = helmctrlv2beta1.AddToScheme(targetScheme)
 	return &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
@@ -51,7 +47,7 @@ func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName st
 func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	logger.WithValues("pipeline", req.NamespacedName.String()).Info("starting reconciliation")
+	logger.Info("starting reconciliation")
 
 	var pipeline v1alpha1.Pipeline
 	if err := r.Get(ctx, req.NamespacedName, &pipeline); err != nil {
@@ -79,56 +75,19 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				return ctrl.Result{}, err
 			}
 
-			secretKey, err := deriveSecretKey(*cluster)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed deriving kubeconfig Secret name: %w", err)
-			}
-			var kubeconfigSecret corev1.Secret
-			if err := r.Get(ctx, secretKey, &kubeconfigSecret); err != nil {
-				if apierrors.IsNotFound(err) {
-					if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Secret for target cluster '%s' not found", target.ClusterRef.String()),
-						v1alpha1.TargetClusterSecretNotFoundReason); err != nil {
-						return ctrl.Result{}, err
-					}
-					// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-					return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+			if !conditions.IsReady(cluster.Status.Conditions) {
+				if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
+					v1alpha1.TargetClusterNotReadyReason); err != nil {
+					return ctrl.Result{}, err
 				}
-				return ctrl.Result{}, err
+				// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
+				return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
 			}
-
-			clientCfg, err := clientcmd.NewClientConfigFromBytes(kubeconfigSecret.Data["value"])
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			restCfg, err := clientCfg.ClientConfig()
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			targetClient, err := client.New(restCfg, client.Options{
-				Scheme: r.targetScheme,
-			})
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-
-			var hrs helmctrlv2beta1.HelmReleaseList
-			if err := targetClient.List(ctx, &hrs,
-				client.InNamespace(target.Namespace),
-				client.MatchingLabels{
-					"pipelines.wego.weave.works/pipeline": pipeline.Name,
-				}); err != nil {
-				if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Failed listing HelmReleases in '%s': %s", target.String(), err),
-					v1alpha1.TargetClusterSecretNotFoundReason); err != nil {
-					return ctrl.Result{Requeue: true}, err
-				}
-				return ctrl.Result{}, err
-			}
-			logger.Info("Got HelmReleases", "target", target, "HelmReleaseList", hrs)
 		}
 	}
 
 	newCondition := metav1.Condition{
-		Type:    meta.ReadyCondition,
+		Type:    conditions.ReadyCondition,
 		Status:  metav1.ConditionTrue,
 		Reason:  v1alpha1.ReconciliationSucceededReason,
 		Message: trimString("All clusters checked", v1alpha1.MaxConditionMessageLength),
@@ -142,27 +101,9 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func deriveSecretKey(cluster clusterctrlv1alpha1.GitopsCluster) (types.NamespacedName, error) {
-	if cluster.Spec.SecretRef != nil {
-		return types.NamespacedName{
-			Namespace: cluster.Namespace,
-			Name:      cluster.Spec.SecretRef.Name,
-		}, nil
-	}
-	if cluster.Spec.CAPIClusterRef != nil {
-		return types.NamespacedName{
-			Namespace: cluster.Namespace,
-			Name:      fmt.Sprintf("%s-%s", cluster.Spec.CAPIClusterRef.Name, "kubeconfig"),
-		}, nil
-	}
-
-	return types.NamespacedName{},
-		fmt.Errorf("cluster %s doesn't have a secretRef or capiClusterRef set", client.ObjectKeyFromObject(&cluster).String())
-}
-
 func (r *PipelineReconciler) setStatusCondition(ctx context.Context, p v1alpha1.Pipeline, msg, reason string) error {
 	newCondition := metav1.Condition{
-		Type:    meta.ReadyCondition,
+		Type:    conditions.ReadyCondition,
 		Status:  metav1.ConditionFalse,
 		Reason:  reason,
 		Message: trimString(msg, v1alpha1.MaxConditionMessageLength),
@@ -186,7 +127,7 @@ func (r *PipelineReconciler) patchStatus(ctx context.Context, n types.Namespaced
 	return r.Status().Patch(ctx, &pipeline, patch, client.FieldOwner(r.ControllerName))
 }
 
-func (r *PipelineReconciler) getCluster(ctx context.Context, p v1alpha1.Pipeline, clusterRef v1alpha1.CrossNamespaceSourceReference) (*clusterctrlv1alpha1.GitopsCluster, error) {
+func (r *PipelineReconciler) getCluster(ctx context.Context, p v1alpha1.Pipeline, clusterRef v1alpha1.CrossNamespaceClusterReference) (*clusterctrlv1alpha1.GitopsCluster, error) {
 	cluster := &clusterctrlv1alpha1.GitopsCluster{}
 	namespace := clusterRef.Namespace
 	if clusterRef.Namespace == "" {
