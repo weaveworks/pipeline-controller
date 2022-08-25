@@ -27,9 +27,8 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
-    - name: Prepare
-      run: |
-        echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
+    - name: Prepare # .netrc is used by docker-build, ~/.netrc is used by go test
+      run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
     - name: Push to GitHub Container Registry
       run: make release # defaults to ghcr.io
     - name: Push to DockerHub
