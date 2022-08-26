@@ -16,6 +16,12 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.appRef.kind
+      name: App Kind
+      type: string
+    - jsonPath: .spec.appRef.name
+      name: App Name
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -44,18 +50,44 @@ spec:
             type: object
           spec:
             properties:
+              appRef:
+                description: AppRef denotes the name and type of the application that's
+                  governed by the pipeline.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  kind:
+                    description: Kind of the referent.
+                    enum:
+                    - HelmRelease
+                    type: string
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
               environments:
+                description: Environments is a list of environments to which the pipeline's
+                  application is supposed to be deployed.
                 items:
                   properties:
                     name:
+                      description: Name defines the name of this environment. This
+                        is commonly something such as "dev" or "prod".
                       type: string
                     targets:
+                      description: Targets is a list of targets that are part of this
+                        environment. Each environment should have at least one target.
                       items:
                         properties:
                           clusterRef:
-                            description: CrossNamespaceClusterReference contains enough
-                              information to let you locate the typed Kubernetes resource
-                              object at cluster level.
+                            description: ClusterRef points to the cluster that's targeted
+                              by this target. If this field is not set, then the target
+                              is assumed to point to a Namespace on the cluster that
+                              the Pipeline resources resides on (i.e. a local target).
                             properties:
                               apiVersion:
                                 description: API version of the referent.
@@ -78,9 +110,11 @@ spec:
                             - name
                             type: object
                           namespace:
+                            description: Namespace denotes the namespace of this target
+                              on the referenced cluster. This is where the app pointed
+                              to by the environment's `appRef` is searched.
                             type: string
                         required:
-                        - clusterRef
                         - namespace
                         type: object
                       type: array
@@ -90,6 +124,7 @@ spec:
                   type: object
                 type: array
             required:
+            - appRef
             - environments
             type: object
           status:
