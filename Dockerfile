@@ -17,7 +17,6 @@ COPY main.go main.go
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 
-
 # Build
 RUN CGO_ENABLED=0 go build -a -o manager main.go
 

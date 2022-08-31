@@ -22,3 +22,5 @@ This project only has unit tests for now. Those are run with
 ```sh
 make test
 ```
+
+Testing on this controller follows closely what is done by default in `kubebuilder` although we ditched the use of `Gomega` in favor of native Go testing structure. As an example on how to write tests for this controller you can take a look at Kubebuilder [docs](https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html#writing-controller-tests) for reference.
