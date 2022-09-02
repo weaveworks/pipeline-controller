@@ -5,11 +5,10 @@ import "fmt"
 // LocalAppReference is used together with a Target to find a single instance of an application on a certain cluster.
 type LocalAppReference struct {
 	// API version of the referent.
-	// +optional
-	APIVersion string `json:"apiVersion,omitempty"`
+	// +required
+	APIVersion string `json:"apiVersion"`
 
 	// Kind of the referent.
-	// +kubebuilder:validation:Enum=HelmRelease
 	// +required
 	Kind string `json:"kind"`
 
