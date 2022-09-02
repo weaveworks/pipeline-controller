@@ -28,7 +28,7 @@ Testing on this controller follows closely what is done by default in `kubebuild
 
 ## Releasing
 
-To make a new release, run the following commands
+To make a new release, run the following commands:
 
 ```sh
 git checkout main
