@@ -24,3 +24,15 @@ make test
 ```
 
 Testing on this controller follows closely what is done by default in `kubebuilder` although we ditched the use of `Gomega` in favor of native Go testing structure. As an example on how to write tests for this controller you can take a look at Kubebuilder [docs](https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html#writing-controller-tests) for reference.
+
+
+## Releasing
+
+To make a new release, run the following commands:
+
+```sh
+git checkout main
+git pull
+git tag -a -s v0.0.1 -m "Pipeline controller v0.0.1"
+git push origin v0.0.1
+```

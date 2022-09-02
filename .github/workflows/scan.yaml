@@ -4,12 +4,12 @@ on:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - main
+  pull_request_target:
+    types:
+      - closed
 
 jobs:
-  scan:
+  test:
     runs-on: ubuntu-latest
     permissions:
       contents: read # for actions/checkout to fetch code
@@ -28,5 +28,28 @@ jobs:
         echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" > ~/.netrc
     - name: Run Snyk to check for vulnerabilities
       run: snyk test --org=product-engineering-ly9 --file=go.mod
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN_WEAVEWORKS_ALL }}
+
+  monitor:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Setup | Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19.x
+        cache: true
+    - name: Setup | Snyk
+      uses: snyk/actions/setup@master
+    - name: Prepare
+      run: |
+        echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" > ~/.netrc
+    - name: Run Snyk to monitor for vulnerabilities
+      run: snyk monitor --org=product-engineering-ly9 --file=go.mod
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN_WEAVEWORKS_ALL }}
