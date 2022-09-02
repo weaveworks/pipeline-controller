@@ -32,6 +32,7 @@ To make a new release, run the following commands:
 
 ```sh
 git checkout main
+git pull
 git tag -a -s v0.0.1 -m "Pipeline controller v0.0.1"
 git push origin v0.0.1
 ```
