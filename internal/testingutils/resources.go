@@ -3,7 +3,7 @@ package testingutils
 import (
 	"context"
 
-	. "github.com/onsi/gomega"
+	Ω "github.com/onsi/gomega"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
@@ -13,16 +13,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewNamespace(ctx context.Context, g Gomega, k client.Client) *corev1.Namespace {
+func NewNamespace(ctx context.Context, g Ω.Gomega, k client.Client) *corev1.Namespace {
 	ns := &corev1.Namespace{}
 	ns.Name = "kube-test-" + rand.String(5)
 
-	g.Expect(k.Create(ctx, ns)).To(Succeed(), "failed creating namespace")
+	g.Expect(k.Create(ctx, ns)).To(Ω.Succeed(), "failed creating namespace")
 
 	return ns
 }
 
-func NewGitopsCluster(ctx context.Context, g Gomega, k client.Client, name string, ns string, kubeConfig []byte) *clusterctrlv1alpha1.GitopsCluster {
+func NewGitopsCluster(ctx context.Context, g Ω.Gomega, k client.Client, name string, ns string, kubeConfig []byte) *clusterctrlv1alpha1.GitopsCluster {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -32,7 +32,7 @@ func NewGitopsCluster(ctx context.Context, g Gomega, k client.Client, name strin
 			"value": kubeConfig,
 		},
 	}
-	g.Expect(k.Create(ctx, secret)).To(Succeed())
+	g.Expect(k.Create(ctx, secret)).To(Ω.Succeed())
 
 	gc := &clusterctrlv1alpha1.GitopsCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -49,7 +49,7 @@ func NewGitopsCluster(ctx context.Context, g Gomega, k client.Client, name strin
 			},
 		},
 	}
-	g.Expect(k.Create(ctx, gc)).To(Succeed())
+	g.Expect(k.Create(ctx, gc)).To(Ω.Succeed())
 
 	return gc
 }

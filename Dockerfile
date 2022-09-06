@@ -16,6 +16,7 @@ RUN --mount=type=secret,id=netrc,dst=/root/.netrc go mod download
 COPY main.go main.go
 COPY controllers/ controllers/
 COPY pkg/ pkg/
+COPY server/ server/
 
 # Build
 RUN CGO_ENABLED=0 go build -a -o manager main.go
