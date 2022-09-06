@@ -69,6 +69,10 @@ type Environment struct {
 	// at least one target.
 	// +required
 	Targets []Target `json:"targets"`
+	// GitSpec contains all the information necessary to clone the repository used to promote the application to this environment. If not specified
+	// automated promotion will not happen.
+	// +optional
+	GitSpec *GitSpec `json:"gitSpec"`
 }
 
 type Target struct {
@@ -80,10 +84,20 @@ type Target struct {
 	// to point to a Namespace on the cluster that the Pipeline resources resides on (i.e. a local target).
 	// +optional
 	ClusterRef *CrossNamespaceClusterReference `json:"clusterRef,omitempty"`
+	// GitSpec contains all the information necessary to clone the repository used to promote the application to this target. If not specified
+	// automated promotion will not happen.
+	// +optional
+	GitSpec *GitSpec `json:"gitSpec"`
 }
 
 func (t Target) String() string {
 	return fmt.Sprintf("%s_%s", t.ClusterRef.String(), t.Namespace)
+}
+
+type GitSpec struct {
+	// URL is the location of the Git repository to clone and push to when promoting the application to the next stage.
+	// +required
+	URL string `json:"url"`
 }
 
 func init() {

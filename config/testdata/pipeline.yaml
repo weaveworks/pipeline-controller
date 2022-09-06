@@ -5,16 +5,21 @@ metadata:
   namespace: default
 spec:
   appRef:
+    apiVersion: helm.toolkit.fluxcd.io/v2beta1
     kind: HelmRelease
     name: podinfo
   environments:
     - name: dev
+      gitSpec:
+        url: https://git@github.com/org/dev-repo
       targets:
         - namespace: podinfo
           clusterRef:
             kind: GitopsCluster
             name: dev
     - name: prod
+      gitSpec:
+        url: https://git@github.com/org/prod-repo
       targets:
         - namespace: podinfo
           clusterRef:
