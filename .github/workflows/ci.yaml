@@ -44,6 +44,12 @@ jobs:
     - name: Prepare
       run: |
         echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" > ~/.netrc
+    - name: mod tidy
+      uses: evantorrie/mott-the-tider@v1-beta
+      with:
+        gomods: |
+          **/go.mod
+        gomodsum_only: false
     - name: Test
       run: make test
 
