@@ -69,6 +69,15 @@ vet: ## Run go vet against code.
 lint: golangci-lint ## Run linters against code
 	$(GOLANGCI_LINT) run --out-format=github-actions --timeout 600s
 
+.PHONY: tidy
+tidy:
+	go mod tidy
+	(cd api && go mod tidy)
+
+.PHONY: verify-tidy
+verify-tidy: tidy
+	git diff --exit-code -- go.mod go.sum api/go.mod api/go.sum
+
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
