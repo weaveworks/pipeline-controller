@@ -9,7 +9,13 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/go-logr/logr"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
+	gitopsv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/watcher"
+	"github.com/weaveworks/weave-gitops-enterprise/pkg/cluster/fetcher"
+	"github.com/weaveworks/weave-gitops/core/clustersmngr"
+	"github.com/weaveworks/weave-gitops/pkg/kube"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -51,7 +57,8 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	logger := zap.New(zap.UseFlagOptions(&opts))
+	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -95,9 +102,35 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
+	clustersFetcher, err := createClustersFetcher(logger)
+	if err != nil {
+		setupLog.Error(err, "problem creating clusters fetcher")
+		os.Exit(1)
+	}
+	clustersWatcher, err := watcher.NewWatcher(watcher.Options{ClusterFetcher: clustersFetcher, Logger: logger})
+	if err != nil {
+		setupLog.Error(err, "failed creating watcher")
+		os.Exit(1)
+	}
+	go clustersWatcher.Watch(ctx)
+
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func createClustersFetcher(logger logr.Logger) (clustersmngr.ClusterFetcher, error) {
+	configGetter := kube.NewImpersonatingConfigGetter(ctrl.GetConfigOrDie(), false)
+	clientGetter := kube.NewDefaultClientGetter(configGetter, "", gitopsv1alpha1.AddToScheme)
+
+	rest, _, err := kube.RestConfig()
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve cluster rest config: %w", err)
+	}
+
+	return fetcher.NewMultiClusterFetcher(logger, rest, clientGetter, "default")
 }
