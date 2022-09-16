@@ -19,7 +19,7 @@ func (r *PipelineReconciler) indexBy(kind string) func(o client.Object) []string
 		var res []string
 		for _, env := range p.Spec.Environments {
 			for _, target := range env.Targets {
-				if target.ClusterRef.Kind == kind {
+				if target.ClusterRef != nil && target.ClusterRef.Kind == kind {
 					namespace := p.GetNamespace()
 					if target.ClusterRef.Namespace != "" {
 						namespace = target.ClusterRef.Namespace
