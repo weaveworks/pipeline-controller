@@ -62,26 +62,29 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	for _, env := range pipeline.Spec.Environments {
 		for _, target := range env.Targets {
-			cluster, err := r.getCluster(ctx, pipeline, target.ClusterRef)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
-						v1alpha1.TargetClusterNotFoundReason); err != nil {
+			// check cluster only if ref is defined
+			if target.ClusterRef != nil {
+				cluster, err := r.getCluster(ctx, pipeline, *target.ClusterRef)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
+							v1alpha1.TargetClusterNotFoundReason); err != nil {
+							return ctrl.Result{}, err
+						}
+						// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
+						return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+					}
+					return ctrl.Result{}, err
+				}
+
+				if !conditions.IsReady(cluster.Status.Conditions) {
+					if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
+						v1alpha1.TargetClusterNotReadyReason); err != nil {
 						return ctrl.Result{}, err
 					}
 					// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
 					return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
 				}
-				return ctrl.Result{}, err
-			}
-
-			if !conditions.IsReady(cluster.Status.Conditions) {
-				if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
-					v1alpha1.TargetClusterNotReadyReason); err != nil {
-					return ctrl.Result{}, err
-				}
-				// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-				return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
 			}
 		}
 	}

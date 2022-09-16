@@ -79,7 +79,7 @@ type Target struct {
 	// ClusterRef points to the cluster that's targeted by this target. If this field is not set, then the target is assumed
 	// to point to a Namespace on the cluster that the Pipeline resources resides on (i.e. a local target).
 	// +optional
-	ClusterRef CrossNamespaceClusterReference `json:"clusterRef"`
+	ClusterRef *CrossNamespaceClusterReference `json:"clusterRef,omitempty"`
 }
 
 func (t Target) String() string {
