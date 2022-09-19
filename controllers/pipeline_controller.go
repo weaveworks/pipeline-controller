@@ -43,6 +43,8 @@ func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName st
 //+kubebuilder:rbac:groups=pipelines.weave.works,resources=pipelines/finalizers,verbs=update
 //+kubebuilder:rbac:groups=gitops.weave.works,resources=gitopsclusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch
+//+kubebuilder:rbac:groups=notification.toolkit.fluxcd.io,resources=providers;alerts,verbs=patch;create
 
 func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -63,8 +65,10 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	for _, env := range pipeline.Spec.Environments {
 		for _, target := range env.Targets {
 			// check cluster only if ref is defined
+			var cluster *clusterctrlv1alpha1.GitopsCluster
 			if target.ClusterRef != nil {
-				cluster, err := r.getCluster(ctx, pipeline, *target.ClusterRef)
+				var err error
+				cluster, err = r.getCluster(ctx, pipeline, *target.ClusterRef)
 				if err != nil {
 					if apierrors.IsNotFound(err) {
 						if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
@@ -85,6 +89,13 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 					// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
 					return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
 				}
+			}
+			if err := r.upsertNotifications(ctx, cluster, target, env, pipeline); err != nil {
+				if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Failed creating notification resources on %q: %q",
+					target.ClusterRef.String(), err.Error()), v1alpha1.NotificationCreationFailedReason); err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, fmt.Errorf("failed creating notification resources on '%s': %w", target.ClusterRef.String(), err)
 			}
 		}
 	}

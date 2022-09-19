@@ -39,6 +39,9 @@ type CrossNamespaceClusterReference struct {
 }
 
 func (s *CrossNamespaceClusterReference) String() string {
+	if s == nil {
+		return ""
+	}
 	if s.Namespace != "" {
 		return fmt.Sprintf("%s/%s/%s", s.Kind, s.Namespace, s.Name)
 	}

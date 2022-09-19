@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/fluxcd/helm-controller/api/v2beta1"
+	ncv1beta1 "github.com/fluxcd/notification-controller/api/v1beta1"
 	. "github.com/onsi/gomega"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -63,6 +65,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("add GitopsCluster to schema failed: %s", err)
 	}
+	runtime.Must(ncv1beta1.AddToScheme(scheme.Scheme))
 
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,

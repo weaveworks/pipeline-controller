@@ -11,6 +11,7 @@ replace github.com/go-git/go-billy/v5 => github.com/go-git/go-billy/v5 v5.3.2-0.
 
 require (
 	github.com/fluxcd/helm-controller/api v0.23.0
+	github.com/fluxcd/notification-controller/api v0.26.0
 	github.com/fluxcd/pkg/apis/meta v0.15.0
 	github.com/fluxcd/pkg/runtime v0.17.0
 	github.com/go-logr/logr v1.2.3

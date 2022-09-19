@@ -9,6 +9,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,6 +28,32 @@ const (
 func TestReconcile(t *testing.T) {
 	g := newGomegaWithT(t)
 	ctx := context.Background()
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pipeline-system",
+		},
+	}
+	g.Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+	pcSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "pipeline-system",
+			Name:      "pipeline-controller-manager",
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Port: 8082,
+					Name: "promhook",
+				},
+			},
+		},
+	}
+	g.Expect(k8sClient.Create(ctx, pcSvc)).To(Succeed())
+	pcSvc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
+		{Hostname: "foo"},
+	}
+	g.Expect(k8sClient.Status().Update(ctx, pcSvc)).To(Succeed())
 
 	t.Run("sets cluster not found condition", func(t *testing.T) {
 		name := "pipeline-" + rand.String(5)
