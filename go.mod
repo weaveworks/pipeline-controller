@@ -9,6 +9,7 @@ replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 
 require (
 	github.com/fluxcd/helm-controller/api v0.23.0
 	github.com/fluxcd/pkg/apis/meta v0.14.2
+	github.com/fluxcd/pkg/runtime v0.13.2
 	github.com/onsi/gomega v1.18.1
 	github.com/weaveworks/cluster-controller v1.3.0
 	github.com/weaveworks/pipeline-controller/api v0.0.0
@@ -63,7 +64,6 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.7.1 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect

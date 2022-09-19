@@ -6,14 +6,17 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
-	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
-	"github.com/weaveworks/pipeline-controller/internal/testingutils"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/internal/testingutils"
 )
 
 const (
@@ -22,7 +25,7 @@ const (
 )
 
 func TestReconcile(t *testing.T) {
-	g := NewGomegaWithT(t)
+	g := newGomegaWithT(t)
 	ctx := context.Background()
 
 	t.Run("sets cluster not found condition", func(t *testing.T) {
@@ -36,7 +39,7 @@ func TestReconcile(t *testing.T) {
 			},
 		}})
 
-		checkReadyCondition(ctx, g, pipeline, metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
 	})
 
 	t.Run("sets reconciliation succeeded condition", func(t *testing.T) {
@@ -49,7 +52,7 @@ func TestReconcile(t *testing.T) {
 
 		pipeline := newPipeline(ctx, g, name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{gc})
 
-		checkReadyCondition(ctx, g, pipeline, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 	})
 
 	t.Run("sets reconciliation succeeded condition without clusterRef", func(t *testing.T) {
@@ -58,25 +61,27 @@ func TestReconcile(t *testing.T) {
 
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
 
-		checkReadyCondition(ctx, g, pipeline, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 	})
 }
 
-func checkReadyCondition(ctx context.Context, g Gomega, pipeline *v1alpha1.Pipeline, status metav1.ConditionStatus, reason string) {
-	createdPipeline := &v1alpha1.Pipeline{}
-	g.Eventually(func() bool {
-		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pipeline), createdPipeline)
+func checkReadyCondition(ctx context.Context, g Gomega, n types.NamespacedName, status metav1.ConditionStatus, reason string) {
+	pipeline := &v1alpha1.Pipeline{}
+	assrt := g.Eventually(func() []metav1.Condition {
+		err := k8sClient.Get(ctx, n, pipeline)
 		if err != nil {
-			return false
+			return nil
 		}
+		return pipeline.Status.Conditions
+	}, defaultTimeout, defaultInterval)
 
-		condition := apimeta.FindStatusCondition(createdPipeline.Status.Conditions, meta.ReadyCondition)
-		if condition != nil {
-			return condition.Status == status && condition.Reason == reason
-		}
+	cond := metav1.Condition{
+		Type:   meta.ReadyCondition,
+		Status: status,
+		Reason: reason,
+	}
 
-		return false
-	}, defaultTimeout, defaultInterval).Should(BeTrue())
+	assrt.Should(conditions.MatchConditions([]metav1.Condition{cond}))
 }
 
 func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters []*clusterctrlv1alpha1.GitopsCluster) *v1alpha1.Pipeline {
