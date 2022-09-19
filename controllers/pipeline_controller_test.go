@@ -25,7 +25,7 @@ const (
 )
 
 func TestReconcile(t *testing.T) {
-	g := NewGomegaWithT(t)
+	g := newGomegaWithT(t)
 	ctx := context.Background()
 
 	t.Run("sets cluster not found condition", func(t *testing.T) {

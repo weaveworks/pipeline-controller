@@ -8,12 +8,14 @@ import (
 	"testing"
 
 	"github.com/fluxcd/helm-controller/api/v2beta1"
+	. "github.com/onsi/gomega"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
-	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
+	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 )
 
 var k8sManager ctrl.Manager
@@ -101,4 +103,14 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(retCode)
+}
+
+func newGomegaWithT(t *testing.T) *WithT {
+	g := NewGomegaWithT(t)
+	g.Fail = func(message string, _ ...int) {
+		t.Helper()
+		t.Logf("\n%s", message)
+		t.Fail()
+	}
+	return g
 }
