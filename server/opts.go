@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
+
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
