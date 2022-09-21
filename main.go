@@ -21,6 +21,7 @@ import (
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/controllers"
 	"github.com/weaveworks/pipeline-controller/server"
+	"github.com/weaveworks/pipeline-controller/server/strategies/githubpr"
 )
 
 const (
@@ -103,11 +104,30 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
+	curNS, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		if !os.IsNotExist(err) {
+			setupLog.Error(err, "failed reading namespace file")
+			os.Exit(1)
+		}
+		curNS = []byte("default")
+	}
+	strategy, err := githubpr.New(
+		githubpr.Client(mgr.GetClient()),
+		githubpr.Logger(logger.WithValues("strategy", "githubpr")),
+		githubpr.GitHubTokenSecret(string(curNS), "gh-token"),
+		githubpr.SSHCredentialsSecret(string(curNS), "ssh-credentials"),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create promotion strategy")
+		os.Exit(1)
+	}
+
 	promServer, err := server.NewPromotionServer(
 		server.Logger(logger),
 		server.Client(mgr.GetClient()),
 		server.ListenAddr(promServerAddr),
-		server.PromotionStrategy(server.NopStrategy{}),
+		server.PromotionStrategy(strategy),
 	)
 	if err != nil {
 		setupLog.Error(err, "failed setting up promotion server")
