@@ -59,6 +59,11 @@ type PipelineStatus struct {
 	// Conditions holds the conditions for the Pipeline.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// The last successfully applied revision.
+	// The revision format for Git sources is <branch|tag>/<commit-sha>.
+	// +optional
+	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
 }
 
 type Environment struct {

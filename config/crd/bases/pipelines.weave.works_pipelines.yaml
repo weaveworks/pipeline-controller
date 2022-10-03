@@ -203,6 +203,10 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
+              lastAppliedRevision:
+                description: The last successfully applied revision. The revision
+                  format for Git sources is <branch|tag>/<commit-sha>.
+                type: string
             type: object
         type: object
     served: true
