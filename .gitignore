@@ -26,3 +26,5 @@ testbin/*
 
 # credentials used for accessing GitHub during container build
 .netrc
+# helm package with version
+pipeline-controller-*.tgz
