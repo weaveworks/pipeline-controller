@@ -66,15 +66,13 @@ func requestTo(g *WithT, handler http.Handler, method, dest string, body []byte)
 	return resp
 }
 
-func createTestPipeline(g *WithT) (v1alpha1.Pipeline, func()) {
-	targets := []v1alpha1.Target{}
-
+func createTestPipeline(g *WithT, t *testing.T) v1alpha1.Pipeline {
 	ns := "default"
 	name := "app"
 
-	targets = append(targets, v1alpha1.Target{
+	targets := []v1alpha1.Target{{
 		Namespace: ns,
-	})
+	}}
 
 	pipeline := v1alpha1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
@@ -105,9 +103,11 @@ func createTestPipeline(g *WithT) (v1alpha1.Pipeline, func()) {
 	}
 	g.Expect(k8sClient.Create(context.Background(), &pipeline)).To(Succeed())
 
-	return pipeline, func() {
+	t.Cleanup(func() {
 		g.Expect(k8sClient.Delete(context.Background(), &pipeline)).To(Succeed())
-	}
+	})
+
+	return pipeline
 }
 
 func TestGet(t *testing.T) {
@@ -128,27 +128,26 @@ func TestPostWithNoBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil)
 	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", nil)
-	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
+	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 
 func TestPostWithIncompatibleBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil)
 	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", []byte("incompatible"))
-	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
+	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 
 func TestPostWithUnknownPipeline(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", marshalEvent(g, createEvent()))
-	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
+	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
 
 func TestInvolvedObjectDoesntMatch(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 	tests := []struct {
 		name      string
 		transform func(ev *events.Event)
@@ -193,43 +192,39 @@ func TestInvolvedObjectDoesntMatch(t *testing.T) {
 
 func TestPromotionBeyondLastEnv(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/no-targets", marshalEvent(g, createEvent()))
-	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
+	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
 	g.Expect(resp.Body.String()).To(Equal("cannot promote beyond last environment no-targets"))
 }
 
 func TestPromotionToEnvWithoutTarget(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/prod", marshalEvent(g, createEvent()))
-	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
+	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
 	g.Expect(resp.Body.String()).To(Equal("environment no-targets has no targets"))
 }
 
 func TestPromotionFromUnknownEnv(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/foo", marshalEvent(g, createEvent()))
-	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
+	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
 	g.Expect(resp.Body.String()).To(Equal("app default/app has no environment foo defined"))
 }
 
 func TestPromotionStarted(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 
 	strat := introspectableStrategy{
 		location: "success",
 	}
-	stratReg := map[string]strategy.Strategy{
+	stratReg := strategy.StrategyRegistry{
 		"nop": &strat,
 	}
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
@@ -255,12 +250,11 @@ func TestPromotionStarted(t *testing.T) {
 
 func TestPromotionFails(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 	strat := introspectableStrategy{
 		err: fmt.Errorf("this didn't work"),
 	}
-	stratReg := map[string]strategy.Strategy{
+	stratReg := strategy.StrategyRegistry{
 		"nop": &strat,
 	}
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
@@ -285,10 +279,9 @@ func TestPromotionFails(t *testing.T) {
 
 func TestPromotionWithoutLocation(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	_, cleanup := createTestPipeline(g)
-	defer cleanup()
+	createTestPipeline(g, t)
 	strat := introspectableStrategy{}
-	stratReg := map[string]strategy.Strategy{
+	stratReg := strategy.StrategyRegistry{
 		"nop": &strat,
 	}
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"time"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-logr/logr"
-	"golang.org/x/net/context"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -45,75 +45,41 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// extract pipeline and environment identifiers from URL path
-
-	appNS, appName, env := func(parts []string) (string, string, string) {
-		return pathMatches[1], pathMatches[2], pathMatches[3]
-	}(pathMatches)
+	appNS, appName, env := pathMatches[1], pathMatches[2], pathMatches[3]
 	promotion := strategy.Promotion{
 		AppNS:   appNS,
 		AppName: appName,
 	}
 
-	// extract target app version from event payload
-
 	var ev events.Event
 	if err := json.NewDecoder(r.Body).Decode(&ev); err != nil {
 		h.log.V(logger.DebugLevel).Info("failed decoding request body")
-		rw.WriteHeader(http.StatusUnprocessableEntity)
+		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	promotion.Version = ev.Metadata["revision"]
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// fetch pipeline
-
 	var pipeline pipelinev1alpha1.Pipeline
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: promotion.AppNS, Name: promotion.AppName}, &pipeline); err != nil {
-		h.log.V(logger.DebugLevel).Info("could not fetch Pipeline object")
-		rw.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	// find the target environment
-
-	var sourceEnv *pipelinev1alpha1.Environment
-	var promEnv *pipelinev1alpha1.Environment
-	for idx, pEnv := range pipeline.Spec.Environments {
-		if pEnv.Name == env {
-			if idx == len(pipeline.Spec.Environments)-1 {
-				rw.WriteHeader(http.StatusBadRequest)
-				fmt.Fprintf(rw, "cannot promote beyond last environment %s", pEnv.Name)
-				return
-			}
-			sourceEnv = &pipeline.Spec.Environments[idx]
-			promEnv = &pipeline.Spec.Environments[idx+1]
+	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.AppNS, Name: promotion.AppName}, &pipeline); err != nil {
+		h.log.V(logger.DebugLevel).Info("could not fetch Pipeline object", "error", err)
+		if errors.IsNotFound(err) {
+			rw.WriteHeader(http.StatusNotFound)
+			return
 		}
-	}
-	if promEnv == nil {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "app %s/%s has no environment %s defined", promotion.AppNS, promotion.AppName, env)
+		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if len(promEnv.Targets) == 0 {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "environment %s has no targets", promEnv.Name)
-		return
-	}
-	if pipeline.Spec.AppRef.APIVersion != ev.InvolvedObject.APIVersion ||
-		pipeline.Spec.AppRef.Kind != ev.InvolvedObject.Kind ||
-		pipeline.Spec.AppRef.Name != ev.InvolvedObject.Name ||
-		!namespaceInTargets(sourceEnv.Targets, ev.InvolvedObject.Namespace) {
+
+	promEnv, err := lookupNextEnvironment(pipeline, env, ev.InvolvedObject)
+	if err != nil {
 		rw.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(rw, "involved object doesn't match Pipeline definition")
+		fmt.Fprint(rw, err.Error())
 		return
 	}
 
 	promotion.Environment = *promEnv
 
-	h.log.Info("promoting app")
+	h.log.Info("promoting app", "app", pipeline.Spec.AppRef, "source environment", env, "target environment", promotion.Environment.Name)
 
 	requestedStrategy := "nop" // this will later be derived from the Pipeline spec
 	strat, ok := h.stratReg[requestedStrategy]
@@ -122,7 +88,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 		fmt.Fprintf(rw, "unknown promotion strategy %q requested.", requestedStrategy)
 		return
 	}
-	res, err := strat.Promote(ctx, promotion)
+	res, err := strat.Promote(r.Context(), promotion)
 	if err != nil {
 		h.log.Error(err, "promotion failed")
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -136,4 +102,34 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	} else {
 		rw.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// lookupNextEnvironment searches the pipeline for the given environment name and returns the subsequent environment. The given pipeline's appRef
+// needs to match the given object reference and the environment pointed to by "env" needs to have at least one target with the appRef's namespace.
+// This ensures that promotion can only be triggered by objects residing in a namespace that is part of an environment's target.
+func lookupNextEnvironment(pipeline pipelinev1alpha1.Pipeline, env string, appRef corev1.ObjectReference) (*pipelinev1alpha1.Environment, error) {
+	var sourceEnv *pipelinev1alpha1.Environment
+	var promEnv *pipelinev1alpha1.Environment
+	for idx, pEnv := range pipeline.Spec.Environments {
+		if pEnv.Name == env {
+			if idx == len(pipeline.Spec.Environments)-1 {
+				return nil, fmt.Errorf("cannot promote beyond last environment %s", pEnv.Name)
+			}
+			sourceEnv = &pipeline.Spec.Environments[idx]
+			promEnv = &pipeline.Spec.Environments[idx+1]
+		}
+	}
+	if promEnv == nil {
+		return nil, fmt.Errorf("app %s/%s has no environment %s defined", pipeline.Namespace, pipeline.Name, env)
+	}
+	if len(promEnv.Targets) == 0 {
+		return nil, fmt.Errorf("environment %s has no targets", promEnv.Name)
+	}
+	if pipeline.Spec.AppRef.APIVersion != appRef.APIVersion ||
+		pipeline.Spec.AppRef.Kind != appRef.Kind ||
+		pipeline.Spec.AppRef.Name != appRef.Name ||
+		!namespaceInTargets(sourceEnv.Targets, appRef.Namespace) {
+		return nil, fmt.Errorf("involved object doesn't match Pipeline definition")
+	}
+	return promEnv, nil
 }

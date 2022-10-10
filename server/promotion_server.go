@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
@@ -34,7 +33,7 @@ var (
 	ErrClientCantBeNil       = fmt.Errorf("client can't be nil")
 	DefaultListenAddr        = "127.0.0.1:8080"
 	DefaultPromotionEndpoint = "/promotion"
-	DefaultStratReg          = strategy.StrategyRegistry(map[string]strategy.Strategy{"nop": strategy.Nop{}})
+	DefaultStratReg          = strategy.StrategyRegistry{"nop": strategy.Nop{}}
 )
 
 func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) {
@@ -109,9 +108,6 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	}()
 
 	<-ctx.Done()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	return srv.Shutdown(ctx)
 }
