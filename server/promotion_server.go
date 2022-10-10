@@ -44,11 +44,11 @@ func NewPromotionServer(opts ...Opt) (*PromotionServer, error) {
 
 	// set defaults
 	if s.promHandler == nil {
-		s.promHandler = DefaultPromotionHandler{
-			log:          s.log.WithName("handler"),
-			promStrategy: s.promStrategy,
-			c:            s.c,
-		}
+		s.promHandler = NewDefaultPromotionHandler(
+			s.log.WithName("handler"),
+			s.promStrategy,
+			s.c,
+		)
 	}
 	if s.promEndpointName == "" {
 		s.promEndpointName = defaultPromotionEndpoint
