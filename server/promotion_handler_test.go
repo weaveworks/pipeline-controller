@@ -12,12 +12,13 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	. "github.com/onsi/gomega"
-	"github.com/weaveworks/pipeline-controller/internal/testingutils"
-	"github.com/weaveworks/pipeline-controller/server"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/internal/testingutils"
+	"github.com/weaveworks/pipeline-controller/server"
+	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
 func createEvent() events.Event {
@@ -41,17 +42,17 @@ func marshalEvent(g *WithT, ev events.Event) []byte {
 }
 
 type introspectableStrategy struct {
-	promotion server.Promotion
+	promotion strategy.Promotion
 	location  string
 	err       error
 }
 
-func (s *introspectableStrategy) Promote(ctx context.Context, prom server.Promotion) (*server.PromotionResult, error) {
+func (s *introspectableStrategy) Promote(ctx context.Context, prom strategy.Promotion) (*strategy.PromotionResult, error) {
 	s.promotion = prom
 	if s.err != nil {
 		return nil, s.err
 	}
-	return &server.PromotionResult{
+	return &strategy.PromotionResult{
 		Location: s.location,
 	}, nil
 }
@@ -224,13 +225,19 @@ func TestPromotionStarted(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	_, cleanup := createTestPipeline(g)
 	defer cleanup()
-	strat := &introspectableStrategy{location: "success"}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), strat, k8sClient)
+
+	strat := introspectableStrategy{
+		location: "success",
+	}
+	stratReg := map[string]strategy.Strategy{
+		"nop": &strat,
+	}
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusCreated))
 	g.Expect(resp.Body.String()).To(Equal(""))
 	g.Expect(resp.Header().Get("location")).To(Equal("success"))
-	expectedProm := server.Promotion{
+	expectedProm := strategy.Promotion{
 		AppNS:   "default",
 		AppName: "app",
 		Environment: v1alpha1.Environment{
@@ -250,14 +257,17 @@ func TestPromotionFails(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	_, cleanup := createTestPipeline(g)
 	defer cleanup()
-	strat := &introspectableStrategy{
+	strat := introspectableStrategy{
 		err: fmt.Errorf("this didn't work"),
 	}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), strat, k8sClient)
+	stratReg := map[string]strategy.Strategy{
+		"nop": &strat,
+	}
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
 	g.Expect(resp.Body.String()).To(Equal("promotion failed: this didn't work"))
-	expectedProm := server.Promotion{
+	expectedProm := strategy.Promotion{
 		AppNS:   "default",
 		AppName: "app",
 		Environment: v1alpha1.Environment{
@@ -277,13 +287,16 @@ func TestPromotionWithoutLocation(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	_, cleanup := createTestPipeline(g)
 	defer cleanup()
-	strat := &introspectableStrategy{}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), strat, k8sClient)
+	strat := introspectableStrategy{}
+	stratReg := map[string]strategy.Strategy{
+		"nop": &strat,
+	}
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusNoContent))
 	g.Expect(resp.Body.String()).To(Equal(""))
 	g.Expect(resp.Header()).NotTo(HaveKey("location"))
-	expectedProm := server.Promotion{
+	expectedProm := strategy.Promotion{
 		AppNS:   "default",
 		AppName: "app",
 		Environment: v1alpha1.Environment{

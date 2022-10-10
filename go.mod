@@ -11,6 +11,7 @@ require (
 	github.com/fluxcd/pkg/apis/meta v0.16.0
 	github.com/fluxcd/pkg/runtime v0.17.0
 	github.com/go-logr/logr v1.2.3
+	github.com/go-logr/stdr v1.2.2
 	github.com/onsi/gomega v1.20.1
 	github.com/spf13/pflag v1.0.5
 	github.com/weaveworks/cluster-controller v1.3.0

@@ -105,10 +105,9 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	promServer, err := server.NewPromotionServer(
+		mgr.GetClient(),
 		server.Logger(log.WithName("promotion")),
-		server.Client(mgr.GetClient()),
 		server.ListenAddr(promServerAddr),
-		server.PromotionStrategy(server.NopStrategy{}),
 	)
 	if err != nil {
 		setupLog.Error(err, "failed setting up promotion server")

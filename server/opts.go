@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
 func Logger(l logr.Logger) Opt {
@@ -14,23 +14,9 @@ func Logger(l logr.Logger) Opt {
 	}
 }
 
-func Client(c client.Client) Opt {
-	return func(s *PromotionServer) error {
-		s.c = c
-		return nil
-	}
-}
-
 func ListenAddr(addr string) Opt {
 	return func(s *PromotionServer) error {
 		s.addr = addr
-		return nil
-	}
-}
-
-func PromotionStrategy(strategy Strategy) Opt {
-	return func(s *PromotionServer) error {
-		s.promStrategy = strategy
 		return nil
 	}
 }
@@ -45,6 +31,13 @@ func PromotionHandler(hndlr http.HandlerFunc) Opt {
 func PromotionEndpointName(n string) Opt {
 	return func(s *PromotionServer) error {
 		s.promEndpointName = n
+		return nil
+	}
+}
+
+func StrategyRegistry(stratReg strategy.StrategyRegistry) Opt {
+	return func(s *PromotionServer) error {
+		s.stratReg = stratReg
 		return nil
 	}
 }

@@ -1,4 +1,4 @@
-package server
+package strategy
 
 import (
 	"context"
@@ -20,3 +20,5 @@ type Promotion struct {
 type PromotionResult struct {
 	Location string
 }
+
+type StrategyRegistry map[string]Strategy

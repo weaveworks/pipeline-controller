@@ -14,19 +14,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
 type DefaultPromotionHandler struct {
-	log          logr.Logger
-	promStrategy Strategy
-	c            client.Client
+	log      logr.Logger
+	c        client.Client
+	stratReg strategy.StrategyRegistry
 }
 
-func NewDefaultPromotionHandler(log logr.Logger, strat Strategy, c client.Client) DefaultPromotionHandler {
+func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client) DefaultPromotionHandler {
 	return DefaultPromotionHandler{
-		log:          log,
-		promStrategy: strat,
-		c:            c,
+		log:      log,
+		c:        c,
+		stratReg: stratReg,
 	}
 }
 
@@ -49,7 +50,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	appNS, appName, env := func(parts []string) (string, string, string) {
 		return pathMatches[1], pathMatches[2], pathMatches[3]
 	}(pathMatches)
-	promotion := Promotion{
+	promotion := strategy.Promotion{
 		AppNS:   appNS,
 		AppName: appName,
 	}
@@ -114,7 +115,14 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 
 	h.log.Info("promoting app")
 
-	res, err := h.promStrategy.Promote(ctx, promotion)
+	requestedStrategy := "nop" // this will later be derived from the Pipeline spec
+	strat, ok := h.stratReg[requestedStrategy]
+	if !ok {
+		rw.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(rw, "unknown promotion strategy %q requested.", requestedStrategy)
+		return
+	}
+	res, err := strat.Promote(ctx, promotion)
 	if err != nil {
 		h.log.Error(err, "promotion failed")
 		rw.WriteHeader(http.StatusInternalServerError)

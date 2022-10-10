@@ -3,15 +3,19 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	"golang.org/x/net/context"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
 type PromotionServer struct {
@@ -20,22 +24,28 @@ type PromotionServer struct {
 	addr             string
 	listener         net.Listener
 	promHandler      http.Handler
-	promStrategy     Strategy
 	promEndpointName string
-}
-
-type NopStrategy struct{}
-
-var defaultPromotionEndpoint = "/promotion"
-
-func (n NopStrategy) Promote(_ context.Context, _ Promotion) (*PromotionResult, error) {
-	return &PromotionResult{}, nil
+	stratReg         strategy.StrategyRegistry
 }
 
 type Opt func(s *PromotionServer) error
 
-func NewPromotionServer(opts ...Opt) (*PromotionServer, error) {
-	s := &PromotionServer{}
+var (
+	ErrClientCantBeNil       = fmt.Errorf("client can't be nil")
+	DefaultListenAddr        = "127.0.0.1:8080"
+	DefaultPromotionEndpoint = "/promotion"
+	DefaultStratReg          = strategy.StrategyRegistry(map[string]strategy.Strategy{"nop": strategy.Nop{}})
+)
+
+func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) {
+	if c == nil {
+		return nil, ErrClientCantBeNil
+	}
+
+	s := &PromotionServer{
+		c: c,
+	}
+
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
 			return nil, err
@@ -43,15 +53,28 @@ func NewPromotionServer(opts ...Opt) (*PromotionServer, error) {
 	}
 
 	// set defaults
+
+	if s.log.GetSink() == nil {
+		s.log = stdr.New(log.New(os.Stdout, "", log.Lshortfile))
+	}
+
+	if s.addr == "" {
+		s.addr = DefaultListenAddr
+	}
+
+	if s.stratReg == nil {
+		s.stratReg = DefaultStratReg
+	}
+
 	if s.promHandler == nil {
 		s.promHandler = NewDefaultPromotionHandler(
 			s.log.WithName("handler"),
-			s.promStrategy,
+			s.stratReg,
 			s.c,
 		)
 	}
 	if s.promEndpointName == "" {
-		s.promEndpointName = defaultPromotionEndpoint
+		s.promEndpointName = DefaultPromotionEndpoint
 	}
 
 	listener, err := net.Listen("tcp", s.addr)
