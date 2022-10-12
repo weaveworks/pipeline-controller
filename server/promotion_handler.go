@@ -92,7 +92,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	if err != nil {
 		h.log.Error(err, "promotion failed")
 		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(rw, "promotion failed: %s", err)
+		fmt.Fprintf(rw, "promotion failed")
 		return
 	}
 
@@ -117,6 +117,7 @@ func lookupNextEnvironment(pipeline pipelinev1alpha1.Pipeline, env string, appRe
 			}
 			sourceEnv = &pipeline.Spec.Environments[idx]
 			promEnv = &pipeline.Spec.Environments[idx+1]
+			break
 		}
 	}
 	if promEnv == nil {

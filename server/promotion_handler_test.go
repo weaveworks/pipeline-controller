@@ -260,7 +260,7 @@ func TestPromotionFails(t *testing.T) {
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
-	g.Expect(resp.Body.String()).To(Equal("promotion failed: this didn't work"))
+	g.Expect(resp.Body.String()).To(Equal("promotion failed"))
 	expectedProm := strategy.Promotion{
 		AppNS:   "default",
 		AppName: "app",
