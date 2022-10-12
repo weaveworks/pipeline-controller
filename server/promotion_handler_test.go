@@ -217,6 +217,17 @@ func TestPromotionFromUnknownEnv(t *testing.T) {
 	g.Expect(resp.Body.String()).To(Equal("app default/app has no environment foo defined"))
 }
 
+func TestPromotionWithNoMetadataInEvent(t *testing.T) {
+	g := testingutils.NewGomegaWithT(t)
+	createTestPipeline(g, t)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
+	ev := createEvent()
+	ev.Metadata = nil
+	resp := requestTo(g, h, http.MethodPost, "/default/app/foo", marshalEvent(g, ev))
+	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
+	g.Expect(resp.Body.String()).To(Equal("event has no 'revision' in the metadata field."))
+}
+
 func TestPromotionStarted(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)

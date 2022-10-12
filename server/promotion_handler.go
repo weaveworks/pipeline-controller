@@ -58,6 +58,11 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	promotion.Version = ev.Metadata["revision"]
+	if promotion.Version == "" {
+		rw.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(rw, "event has no 'revision' in the metadata field.")
+		return
+	}
 
 	var pipeline pipelinev1alpha1.Pipeline
 	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.AppNS, Name: promotion.AppName}, &pipeline); err != nil {
