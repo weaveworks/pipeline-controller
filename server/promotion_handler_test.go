@@ -196,7 +196,7 @@ func TestVerifyXSignature(t *testing.T) {
 		return requestTo(g, h, http.MethodPost, "/default/app/dev", header, eventData)
 	}
 
-	t.Run("succeds with proper hmac", func(t *testing.T) {
+	t.Run("succeeds with proper hmac", func(t *testing.T) {
 		mac := hmac.New(sha256.New, secret.Data["token"])
 		_, err := mac.Write(eventData)
 		g.Expect(err).NotTo(HaveOccurred())
