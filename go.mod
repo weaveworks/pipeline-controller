@@ -8,7 +8,7 @@ replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 
 
 require (
 	github.com/fluxcd/helm-controller/api v0.25.0
-	github.com/fluxcd/pkg/apis/meta v0.16.0
+	github.com/fluxcd/pkg/apis/meta v0.17.0
 	github.com/fluxcd/pkg/runtime v0.17.0
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.2
