@@ -6,8 +6,6 @@ replace github.com/weaveworks/pipeline-controller/api => ./api
 
 replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 v3.0.1
 
-replace golang.org/x/text/language v0.3.7 => golang.org/x/text/language v0.3.8
-
 require (
 	github.com/fluxcd/helm-controller/api v0.25.0
 	github.com/fluxcd/pkg/apis/meta v0.17.0
@@ -77,7 +75,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220822191816-0ebed06d0094 // indirect
 	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/text v0.3.8 // indirect
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
