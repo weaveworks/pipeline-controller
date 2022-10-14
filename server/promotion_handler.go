@@ -25,6 +25,10 @@ import (
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
+const (
+	XSignatureHeader = "X-Signature"
+)
+
 type DefaultPromotionHandler struct {
 	log      logr.Logger
 	c        client.Client
@@ -189,8 +193,8 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 		return fmt.Errorf("no 'token' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, p.Name)
 	}
 
-	if len(header["X-Signature"]) > 0 {
-		if err := verifySignature(header["X-Signature"][0], body, key); err != nil {
+	if len(header[XSignatureHeader]) > 0 {
+		if err := verifySignature(header[XSignatureHeader][0], body, key); err != nil {
 			return fmt.Errorf("failed verifying X-Signature header: %s", err)
 		}
 	}
