@@ -6,6 +6,10 @@ replace github.com/weaveworks/pipeline-controller/api => ./api
 
 replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 v3.0.1
 
+// this is to mitigate https://security.snyk.io/vuln/SNYK-GOLANG-GOLANGORGXTEXTLANGUAGE-3043869. v0.3.7 is pulled in through github.com/onsi/gomega.
+// Remove this directive as soon as gomega uses at least v0.3.8.
+replace golang.org/x/text v0.3.7 => golang.org/x/text v0.3.8
+
 require (
 	github.com/fluxcd/helm-controller/api v0.25.0
 	github.com/fluxcd/pkg/apis/meta v0.16.0
