@@ -189,7 +189,7 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 
 	key := s.Data["token"]
 	if len(key) == 0 {
-		return fmt.Errorf("no 'token' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, p.Name)
+		return fmt.Errorf("no 'token' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, s.Name)
 	}
 
 	if err := verifySignature(header[SignatureHeader][0], body, key); err != nil {
