@@ -149,8 +149,9 @@ func TestPostWithWrongPath(t *testing.T) {
 
 func TestPostWithNoBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil)
-	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", nil, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient)
+	createTestPipeline(g, t)
+	resp := requestTo(g, h, http.MethodPost, "/default/app/env", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 

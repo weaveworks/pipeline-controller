@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -17,7 +18,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -65,21 +66,15 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(rw, "failed reading request body: %w", err)
-		return
-	}
-
-	if len(body) == 0 {
+		h.log.V(logger.DebugLevel).Error(err, "reading request body")
 		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(rw, "no request body provided")
 		return
 	}
 
 	var pipeline pipelinev1alpha1.Pipeline
 	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.AppNS, Name: promotion.AppName}, &pipeline); err != nil {
 		h.log.V(logger.DebugLevel).Info("could not fetch Pipeline object", "error", err)
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -88,8 +83,8 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.verifyXSignature(r.Context(), pipeline, r.Header, body); err != nil {
+		h.log.V(logger.DebugLevel).Error(err, "failed verifying X-Signature header")
 		rw.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintln(rw, "failed verifying X-Signature header: %w", err)
 		return
 	}
 
@@ -177,6 +172,10 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 		return nil
 	}
 
+	if len(header[XSignatureHeader]) == 0 {
+		return errors.New("no X-Signature header provided")
+	}
+
 	s := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      p.Spec.AppRef.SecretRef.Name,
@@ -193,10 +192,8 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 		return fmt.Errorf("no 'token' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, p.Name)
 	}
 
-	if len(header[XSignatureHeader]) > 0 {
-		if err := verifySignature(header[XSignatureHeader][0], body, key); err != nil {
-			return fmt.Errorf("failed verifying X-Signature header: %s", err)
-		}
+	if err := verifySignature(header[XSignatureHeader][0], body, key); err != nil {
+		return fmt.Errorf("failed verifying X-Signature header: %s", err)
 	}
 
 	return nil
