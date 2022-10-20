@@ -184,7 +184,7 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 	}
 
 	if err := h.c.Get(ctx, client.ObjectKeyFromObject(s), s); err != nil {
-		return fmt.Errorf("failed fetching pipeline: %w", err)
+		return fmt.Errorf("failed fetching Secret %s/%s: %w", err, s.Namespace, s.Name)
 	}
 
 	key := s.Data["token"]
