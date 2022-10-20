@@ -33,3 +33,5 @@ jobs:
       run: make release # defaults to ghcr.io
     - name: Push to DockerHub
       run: IMG_REGISTRY=docker.io make release
+    - name: Push Helm chart to GitHub Container Registry
+      run: make helm-release
