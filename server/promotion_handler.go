@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	XSignatureHeader = "X-Signature"
+	SignatureHeader = "X-Signature"
 )
 
 type DefaultPromotionHandler struct {
