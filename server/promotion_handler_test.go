@@ -185,7 +185,7 @@ func TestVerifyXSignature(t *testing.T) {
 
 	makeSignedReq := func(hmac string) *httptest.ResponseRecorder {
 		header := http.Header{
-			server.XSignatureHeader: []string{fmt.Sprintf("sha256=%s", hmac)},
+			server.SignatureHeader: []string{fmt.Sprintf("sha256=%s", hmac)},
 		}
 		strat := introspectableStrategy{
 			location: "success",

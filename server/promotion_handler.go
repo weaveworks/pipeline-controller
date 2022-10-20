@@ -172,7 +172,7 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 		return nil
 	}
 
-	if len(header[XSignatureHeader]) == 0 {
+	if len(header[SignatureHeader]) == 0 {
 		return errors.New("no X-Signature header provided")
 	}
 
@@ -192,7 +192,7 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 		return fmt.Errorf("no 'token' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, p.Name)
 	}
 
-	if err := verifySignature(header[XSignatureHeader][0], body, key); err != nil {
+	if err := verifySignature(header[SignatureHeader][0], body, key); err != nil {
 		return fmt.Errorf("failed verifying X-Signature header: %s", err)
 	}
 
