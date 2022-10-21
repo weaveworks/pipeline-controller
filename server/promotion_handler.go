@@ -187,9 +187,9 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 		return fmt.Errorf("failed fetching Secret %s/%s: %w", s.Namespace, s.Name, err)
 	}
 
-	key := s.Data["token"]
+	key := s.Data["hmac-key"]
 	if len(key) == 0 {
-		return fmt.Errorf("no 'token' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, s.Name)
+		return fmt.Errorf("no 'hmac-key' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, s.Name)
 	}
 
 	if err := verifySignature(header[SignatureHeader][0], body, key); err != nil {

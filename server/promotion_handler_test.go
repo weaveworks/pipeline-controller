@@ -122,7 +122,7 @@ func createHmacSecret(g *WithT, t *testing.T, p v1alpha1.Pipeline) corev1.Secret
 			Namespace: p.Namespace,
 		},
 		Data: map[string][]byte{
-			"token": []byte("hmac-secret"),
+			"hmac-key": []byte("hmac-secret"),
 		},
 	}
 	g.Expect(k8sClient.Create(context.Background(), &secret)).To(Succeed())
@@ -198,7 +198,7 @@ func TestVerifyXSignature(t *testing.T) {
 	}
 
 	t.Run("succeeds with proper hmac", func(t *testing.T) {
-		mac := hmac.New(sha256.New, secret.Data["token"])
+		mac := hmac.New(sha256.New, secret.Data["hmac-key"])
 		_, err := mac.Write(eventData)
 		g.Expect(err).NotTo(HaveOccurred())
 		sum := fmt.Sprintf("%x", mac.Sum(nil))
