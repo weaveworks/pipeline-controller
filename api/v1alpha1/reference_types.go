@@ -20,7 +20,7 @@ type LocalAppReference struct {
 	// +required
 	Name string `json:"name"`
 
-	// SecrefRef reference to the HMAC key used to authenticate webhook calls
+	// SecrefRef reference the secret that contains a 'hmac-key' field with HMAC key used to authenticate webhook calls.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
