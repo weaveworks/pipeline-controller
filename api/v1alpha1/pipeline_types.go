@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -15,6 +16,8 @@ const (
 	// DefaultRequeueInterval is used when immediate re-queueing of a reconcile request isn't necessary, e.g. when it's expected to be
 	// triggered by a watched resource before.
 	DefaultRequeueInterval = 30 * time.Minute
+	// DefaultBranch denotes the branch to use when promoting applications and no particular branch is requested through the API object.
+	DefaultBranch = "main"
 )
 
 // +kubebuilder:object:root=true
@@ -49,6 +52,39 @@ type PipelineSpec struct {
 	// AppRef denotes the name and type of the application that's governed by the pipeline.
 	// +required
 	AppRef LocalAppReference `json:"appRef"`
+	// Promotion defines details about how promotions are carried out between the environments
+	// of this pipeline.
+	// +optional
+	Promotion *Promotion `json:"promotion,omitempty"`
+}
+
+// Promotion defines all the available promotion strategies. All of the fields in here are mutually exclusive, i.e. you can only select one
+// promotion strategy per Pipeline. Failure to do so will result in undefined behaviour.
+type Promotion struct {
+	// PullRequest defines a promotion through a GitHub Pull Request.
+	// +optional
+	PullRequest *PullRequestPromotion `json:"pull-request,omitempty"`
+}
+
+type PullRequestPromotion struct {
+	// The git repository URL used to patch the manifests for promotion.
+	// +required
+	URL string `json:"url"`
+	// The branch to checkout after cloning. Note: This is just the base
+	// branch and does not denote the branch used to create a PR from. The
+	// latter is generated automatically and cannot be provided. If not specified
+	// the default "main" is used.
+	// +optional
+	Branch string `json:"branch"`
+	// SecretRef specifies the Secret containing authentication credentials for
+	// the git repository and for the GitHub API.
+	// For HTTPS repositories the Secret must contain 'username' and 'password'
+	// fields.
+	// For SSH repositories the Secret must contain 'identity'
+	// and 'known_hosts' fields.
+	// For the GitHub API the Secret must contain a 'token' field.
+	// +required
+	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
 
 type PipelineStatus struct {

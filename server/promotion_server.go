@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	"golang.org/x/net/context"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -33,7 +33,6 @@ var (
 	ErrClientCantBeNil       = fmt.Errorf("client can't be nil")
 	DefaultListenAddr        = "127.0.0.1:8080"
 	DefaultPromotionEndpoint = "/promotion"
-	DefaultStratReg          = strategy.StrategyRegistry{"nop": strategy.Nop{}}
 )
 
 func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) {
@@ -50,19 +49,24 @@ func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) 
 			return nil, err
 		}
 	}
+	setDefaults(s)
 
-	// set defaults
+	listener, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating listener: %w", err)
+	}
+	s.listener = listener
 
+	return s, nil
+}
+
+func setDefaults(s *PromotionServer) {
 	if s.log.GetSink() == nil {
 		s.log = stdr.New(log.New(os.Stdout, "", log.Lshortfile))
 	}
 
 	if s.addr == "" {
 		s.addr = DefaultListenAddr
-	}
-
-	if s.stratReg == nil {
-		s.stratReg = DefaultStratReg
 	}
 
 	if s.promHandler == nil {
@@ -75,14 +79,6 @@ func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) 
 	if s.promEndpointName == "" {
 		s.promEndpointName = DefaultPromotionEndpoint
 	}
-
-	listener, err := net.Listen("tcp", s.addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating listener: %w", err)
-	}
-	s.listener = listener
-
-	return s, nil
 }
 
 func (s PromotionServer) Start(ctx context.Context) error {

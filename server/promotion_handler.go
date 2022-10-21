@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -45,11 +46,11 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	appNS, appName, env := pathMatches[1], pathMatches[2], pathMatches[3]
 	promotion := strategy.Promotion{
-		AppNS:   appNS,
-		AppName: appName,
+		PipelineNamespace: pathMatches[1],
+		PipelineName:      pathMatches[2],
 	}
+	env := pathMatches[3]
 
 	var ev events.Event
 	if err := json.NewDecoder(r.Body).Decode(&ev); err != nil {
@@ -65,7 +66,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	}
 
 	var pipeline pipelinev1alpha1.Pipeline
-	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.AppNS, Name: promotion.AppName}, &pipeline); err != nil {
+	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.PipelineNamespace, Name: promotion.PipelineName}, &pipeline); err != nil {
 		h.log.V(logger.DebugLevel).Info("could not fetch Pipeline object", "error", err)
 		if errors.IsNotFound(err) {
 			rw.WriteHeader(http.StatusNotFound)
@@ -81,23 +82,15 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 		fmt.Fprint(rw, err.Error())
 		return
 	}
-
 	promotion.Environment = *promEnv
 
 	h.log.Info("promoting app", "app", pipeline.Spec.AppRef, "source environment", env, "target environment", promotion.Environment.Name)
 
-	requestedStrategy := "nop" // this will later be derived from the Pipeline spec
-	strat, ok := h.stratReg[requestedStrategy]
-	if !ok {
-		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(rw, "unknown promotion strategy %q requested.", requestedStrategy)
-		return
-	}
-	res, err := strat.Promote(r.Context(), promotion)
+	res, err := h.promote(r.Context(), pipeline, promotion)
 	if err != nil {
-		h.log.Error(err, "promotion failed")
+		h.log.Error(err, "error promoting application")
 		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(rw, "promotion failed")
+		fmt.Fprintf(rw, "error promoting application, please consult the promotion server's logs")
 		return
 	}
 
@@ -107,6 +100,20 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	} else {
 		rw.WriteHeader(http.StatusNoContent)
 	}
+}
+
+func (h DefaultPromotionHandler) promote(ctx context.Context, p pipelinev1alpha1.Pipeline, prom strategy.Promotion) (*strategy.PromotionResult, error) {
+	promotionSpec := p.Spec.Promotion
+	if promotionSpec == nil {
+		return nil, fmt.Errorf("no promotion configured in Pipeline resource")
+	}
+
+	strat, err := h.stratReg.Get(*promotionSpec)
+	if err != nil {
+		return nil, fmt.Errorf("error getting strategy from registry: %w", err)
+	}
+	return strat.Promote(ctx, *promotionSpec, prom)
+
 }
 
 // lookupNextEnvironment searches the pipeline for the given environment name and returns the subsequent environment. The given pipeline's appRef

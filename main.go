@@ -20,6 +20,8 @@ import (
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/controllers"
 	"github.com/weaveworks/pipeline-controller/server"
+	"github.com/weaveworks/pipeline-controller/server/strategy"
+	"github.com/weaveworks/pipeline-controller/server/strategy/githubpr"
 )
 
 const (
@@ -104,10 +106,20 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
+	ghStrat, err := githubpr.NewGitHubPR(mgr.GetClient(), log.WithValues("strategy", "githubpr"))
+	if err != nil {
+		setupLog.Error(err, "unable to create GitHub promotion strategy")
+		os.Exit(1)
+	}
+
+	var stratReg strategy.StrategyRegistry
+	stratReg.Register(ghStrat)
+
 	promServer, err := server.NewPromotionServer(
 		mgr.GetClient(),
 		server.Logger(log.WithName("promotion")),
 		server.ListenAddr(promServerAddr),
+		server.StrategyRegistry(stratReg),
 	)
 	if err != nil {
 		setupLog.Error(err, "failed setting up promotion server")
