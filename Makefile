@@ -117,7 +117,7 @@ release: docker-push
 
 .PHONY: helm-release
 helm-release: VERSION=$(shell echo "$$(grep "version: "  ./charts/pipeline-controller/Chart.yaml | awk '{print $$2}')")
-helm-release: helm helm-chart
+helm-release: kustomize helm helm-chart
 	$(HELM) push pipeline-controller-${VERSION}.tgz oci://${CHART_REGISTRY}
 
 ##@ Deployment
