@@ -1,6 +1,10 @@
 package v1alpha1
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/fluxcd/pkg/apis/meta"
+)
 
 // LocalAppReference is used together with a Target to find a single instance of an application on a certain cluster.
 type LocalAppReference struct {
@@ -15,6 +19,10 @@ type LocalAppReference struct {
 	// Name of the referent.
 	// +required
 	Name string `json:"name"`
+
+	// SecrefRef reference the secret that contains a 'hmac-key' field with HMAC key used to authenticate webhook calls.
+	// +optional
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
 // CrossNamespaceClusterReference contains enough information to let you locate the
