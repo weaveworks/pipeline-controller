@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pipeline-controller.fullname" . }}-promotion
+  labels:
+    control-plane: controller
+  {{- include "pipeline-controller.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.promotion.type }}
+  selector:
+    app: pipeline-controller
+  {{- include "pipeline-controller.selectorLabels" . | nindent 4 }}
+  ports:
+	{{- .Values.promotion.ports | toYaml | nindent 2 -}}

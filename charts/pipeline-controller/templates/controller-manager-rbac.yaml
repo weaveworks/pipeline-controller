@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "pipeline-controller.fullname" . }}-manager-role
+  name: {{ include "pipeline-controller.fullname" . }}
   labels:
   {{- include "pipeline-controller.labels" . | nindent 4 }}
 rules:
@@ -51,13 +51,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "pipeline-controller.fullname" . }}-manager-rolebinding
+  name: {{ include "pipeline-controller.fullname" . }}
   labels:
   {{- include "pipeline-controller.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: '{{ include "pipeline-controller.fullname" . }}-manager-role'
+  name: '{{ include "pipeline-controller.fullname" . }}'
 subjects:
 - kind: ServiceAccount
   name: '{{ include "pipeline-controller.fullname" . }}'

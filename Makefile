@@ -89,8 +89,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 helm-chart: APP_VERSION=$(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
 helm-chart: helmify
 	$(KUSTOMIZE) build config/default | $(HELMIFY) --crd-dir $(CHART_PATH)
-	@grep -rl -e '-controller-manager' $(CHART_PATH) | xargs $(SED) -i 's/-controller-manager//g'
-	@grep -rl -e 'control-plane: controller-manager' $(CHART_PATH) | xargs $(SED) -i '/control-plane: controller-manager/d'
+	@grep -rle '{{ include "pipeline-controller.fullname" . }}-controller\(-manager\)*' $(CHART_PATH)/templates | xargs $(SED) -i 's/\({{ include "pipeline-controller.fullname" . }}\)-controller\(-manager\)*/\1/'
 	$(SED) -i 's/tag: latest/tag: ${APP_VERSION}/' $(CHART_PATH)/values.yaml
 	$(HELM) package $(CHART_PATH) --app-version=${APP_VERSION} --debug
 ##@ Build
