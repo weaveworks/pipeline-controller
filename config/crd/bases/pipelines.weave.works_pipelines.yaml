@@ -136,6 +136,8 @@ spec:
                 description: Promotion defines details about how promotions are carried
                   out between the environments of this pipeline.
                 properties:
+                  noop:
+                    type: object
                   pull-request:
                     description: PullRequest defines a promotion through a GitHub
                       Pull Request.

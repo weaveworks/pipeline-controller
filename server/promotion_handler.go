@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kuberecorder "k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -28,19 +29,22 @@ import (
 
 const (
 	SignatureHeader = "X-Signature"
+	PromoteReason   = "Promote"
 )
 
 type DefaultPromotionHandler struct {
-	log      logr.Logger
-	c        client.Client
-	stratReg strategy.StrategyRegistry
+	log           logr.Logger
+	c             client.Client
+	stratReg      strategy.StrategyRegistry
+	eventRecorder kuberecorder.EventRecorder
 }
 
-func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client) DefaultPromotionHandler {
+func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client, eventRecorder kuberecorder.EventRecorder) DefaultPromotionHandler {
 	return DefaultPromotionHandler{
-		log:      log,
-		c:        c,
-		stratReg: stratReg,
+		log:           log,
+		c:             c,
+		stratReg:      stratReg,
+		eventRecorder: eventRecorder,
 	}
 }
 
@@ -133,12 +137,21 @@ func (h DefaultPromotionHandler) promote(ctx context.Context, p pipelinev1alpha1
 		return nil, fmt.Errorf("no promotion configured in Pipeline resource")
 	}
 
+	metadata := map[string]string{
+		"pipelineName":      prom.PipelineName,
+		"pipelineNamespace": prom.PipelineNamespace,
+		"environment":       prom.Environment.Name,
+		"version":           prom.Version,
+	}
+
+	h.eventRecorder.AnnotatedEventf(&p, metadata, corev1.EventTypeNormal, PromoteReason,
+		"Promote pipeline %s/%s to %s with version %s", prom.PipelineNamespace, prom.PipelineName, prom.Environment.Name, prom.Version)
+
 	strat, err := h.stratReg.Get(*promotionSpec)
 	if err != nil {
 		return nil, fmt.Errorf("error getting strategy from registry: %w", err)
 	}
 	return strat.Promote(ctx, *promotionSpec, prom)
-
 }
 
 // lookupNextEnvironment searches the pipeline for the given environment name and returns the subsequent environment. The given pipeline's appRef
@@ -163,6 +176,7 @@ func lookupNextEnvironment(pipeline pipelinev1alpha1.Pipeline, env string, appRe
 	if len(promEnv.Targets) == 0 {
 		return nil, fmt.Errorf("environment %s has no targets", promEnv.Name)
 	}
+
 	if pipeline.Spec.AppRef.APIVersion != appRef.APIVersion ||
 		pipeline.Spec.AppRef.Kind != appRef.Kind ||
 		pipeline.Spec.AppRef.Name != appRef.Name ||

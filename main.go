@@ -8,6 +8,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	flag "github.com/spf13/pflag"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
@@ -22,6 +23,7 @@ import (
 	"github.com/weaveworks/pipeline-controller/server"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 	"github.com/weaveworks/pipeline-controller/server/strategy/githubpr"
+	"github.com/weaveworks/pipeline-controller/server/strategy/noop"
 )
 
 const (
@@ -42,6 +44,7 @@ func init() {
 func main() {
 	var (
 		metricsAddr          string
+		eventsAddr           string
 		enableLeaderElection bool
 		probeAddr            string
 		promServerAddr       string
@@ -49,6 +52,7 @@ func main() {
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&promServerAddr, "promotion-hook-bind-address", ":8082", "The address the promotion webhook server endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -86,10 +90,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	var eventRecorder *events.Recorder
+	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
+	}
+
 	if err = controllers.NewPipelineReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		controllerName,
+		eventRecorder,
 	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pipeline")
 		os.Exit(1)
@@ -111,15 +122,18 @@ func main() {
 		setupLog.Error(err, "unable to create GitHub promotion strategy")
 		os.Exit(1)
 	}
+	noopStrat, _ := noop.NewNoop()
 
 	var stratReg strategy.StrategyRegistry
 	stratReg.Register(ghStrat)
+	stratReg.Register(noopStrat)
 
 	promServer, err := server.NewPromotionServer(
 		mgr.GetClient(),
 		server.Logger(log.WithName("promotion")),
 		server.ListenAddr(promServerAddr),
 		server.StrategyRegistry(stratReg),
+		server.EventRecorder(eventRecorder),
 	)
 	if err != nil {
 		setupLog.Error(err, "failed setting up promotion server")

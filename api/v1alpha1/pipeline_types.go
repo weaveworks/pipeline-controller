@@ -64,6 +64,10 @@ type Promotion struct {
 	// PullRequest defines a promotion through a GitHub Pull Request.
 	// +optional
 	PullRequest *PullRequestPromotion `json:"pull-request,omitempty"`
+	// Noop intended to be used when relying on notification-controller to
+	// push promotions elsewhere.
+	// +optional
+	Noop *Noop `json:"noop,omitempty"`
 }
 
 type PullRequestPromotion struct {
@@ -86,6 +90,8 @@ type PullRequestPromotion struct {
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
+
+type Noop struct{}
 
 type PipelineStatus struct {
 	// ObservedGeneration is the last observed generation.
