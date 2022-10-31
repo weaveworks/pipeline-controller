@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: {{ include "pipeline-controller.fullname" . }}
   labels:
-  {{- include "pipeline-controller.labels" . | nindent 4 }}
+    {{- include "pipeline-controller.labels" . | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -11,18 +11,16 @@ metadata:
   name: {{ include "pipeline-controller.fullname" . }}
   labels:
     control-plane: controller
-  {{- include "pipeline-controller.labels" . | nindent 4 }}
+    {{- include "pipeline-controller.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.controller.replicas }}
   selector:
     matchLabels:
-      app: pipeline-controller
-    {{- include "pipeline-controller.selectorLabels" . | nindent 6 }}
+      {{- include "pipeline-controller.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: pipeline-controller
-      {{- include "pipeline-controller.selectorLabels" . | nindent 8 }}
+        {{- include "pipeline-controller.selectorLabels" . | nindent 8 }}
       annotations:
         kubectl.kubernetes.io/default-container: manager
     spec:
