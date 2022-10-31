@@ -29,7 +29,6 @@ import (
 
 const (
 	SignatureHeader = "X-Signature"
-	PromoteReason   = "Promote"
 )
 
 type DefaultPromotionHandler struct {
@@ -136,16 +135,6 @@ func (h DefaultPromotionHandler) promote(ctx context.Context, p pipelinev1alpha1
 	if promotionSpec == nil {
 		return nil, fmt.Errorf("no promotion configured in Pipeline resource")
 	}
-
-	metadata := map[string]string{
-		"pipelineName":      prom.PipelineName,
-		"pipelineNamespace": prom.PipelineNamespace,
-		"environment":       prom.Environment.Name,
-		"version":           prom.Version,
-	}
-
-	h.eventRecorder.AnnotatedEventf(&p, metadata, corev1.EventTypeNormal, PromoteReason,
-		"Promote pipeline %s/%s to %s with version %s", prom.PipelineNamespace, prom.PipelineName, prom.Environment.Name, prom.Version)
 
 	strat, err := h.stratReg.Get(*promotionSpec)
 	if err != nil {

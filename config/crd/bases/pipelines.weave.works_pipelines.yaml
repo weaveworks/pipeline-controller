@@ -137,6 +137,8 @@ spec:
                   out between the environments of this pipeline.
                 properties:
                   noop:
+                    description: Notification intended to be used when relying on
+                      notification-controller to push promotions elsewhere.
                     type: object
                   pull-request:
                     description: PullRequest defines a promotion through a GitHub

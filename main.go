@@ -23,7 +23,7 @@ import (
 	"github.com/weaveworks/pipeline-controller/server"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 	"github.com/weaveworks/pipeline-controller/server/strategy/githubpr"
-	"github.com/weaveworks/pipeline-controller/server/strategy/noop"
+	"github.com/weaveworks/pipeline-controller/server/strategy/notification"
 )
 
 const (
@@ -122,11 +122,12 @@ func main() {
 		setupLog.Error(err, "unable to create GitHub promotion strategy")
 		os.Exit(1)
 	}
-	noopStrat, _ := noop.NewNoop()
+
+	notificationStrat, _ := notification.NewNotification(mgr.GetClient(), eventRecorder)
 
 	var stratReg strategy.StrategyRegistry
 	stratReg.Register(ghStrat)
-	stratReg.Register(noopStrat)
+	stratReg.Register(notificationStrat)
 
 	promServer, err := server.NewPromotionServer(
 		mgr.GetClient(),
