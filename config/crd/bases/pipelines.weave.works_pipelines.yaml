@@ -136,7 +136,7 @@ spec:
                 description: Promotion defines details about how promotions are carried
                   out between the environments of this pipeline.
                 properties:
-                  noop:
+                  notification:
                     description: Notification intended to be used when relying on
                       notification-controller to push promotions elsewhere.
                     type: object

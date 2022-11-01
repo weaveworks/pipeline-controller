@@ -67,7 +67,7 @@ type Promotion struct {
 	// Notification intended to be used when relying on notification-controller to
 	// push promotions elsewhere.
 	// +optional
-	Notification *Notification `json:"noop,omitempty"`
+	Notification *NotificationPromotion `json:"notification,omitempty"`
 }
 
 type PullRequestPromotion struct {
@@ -91,7 +91,7 @@ type PullRequestPromotion struct {
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
 
-type Notification struct{}
+type NotificationPromotion struct{}
 
 type PipelineStatus struct {
 	// ObservedGeneration is the last observed generation.
