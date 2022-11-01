@@ -18,6 +18,9 @@ metadata:
   name: {{ $promotionName }}
   labels:
     {{- include "pipeline-controller.labels" . | nindent 4 }}
+    {{- with .Values.promotion.ingress.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- with .Values.promotion.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

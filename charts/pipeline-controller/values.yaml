@@ -19,10 +19,12 @@ promotion:
     port: 8082
     nodePort: ""
     annotations: {}
+    labels: {}
   ingress:
     enabled: false
     className: ""
     annotations: {}
+    labels: {}
     hosts: []
     # - host: chart-example.local
     #   paths:
