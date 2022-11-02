@@ -64,8 +64,7 @@ type Promotion struct {
 	// PullRequest defines a promotion through a GitHub Pull Request.
 	// +optional
 	PullRequest *PullRequestPromotion `json:"pull-request,omitempty"`
-	// Notification intended to be used when relying on notification-controller to
-	// push promotions elsewhere.
+	// Notification defines a promotion where an event is emitted through Flux's notification-controller each time an app is to be promoted.
 	// +optional
 	Notification *NotificationPromotion `json:"notification,omitempty"`
 }
