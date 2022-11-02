@@ -30,14 +30,13 @@ type PipelineReconciler struct {
 	EventRecorder  kuberecorder.EventRecorder
 }
 
-func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, eventRecorder kuberecorder.EventRecorder) *PipelineReconciler {
+func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
 	return &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
 		targetScheme:   targetScheme,
 		ControllerName: controllerName,
-		EventRecorder:  eventRecorder,
 	}
 }
 

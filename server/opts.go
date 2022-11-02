@@ -6,7 +6,6 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/weaveworks/pipeline-controller/server/strategy"
-	kuberecorder "k8s.io/client-go/tools/record"
 )
 
 func Logger(l logr.Logger) Opt {
@@ -40,13 +39,6 @@ func PromotionEndpointName(n string) Opt {
 func StrategyRegistry(stratReg strategy.StrategyRegistry) Opt {
 	return func(s *PromotionServer) error {
 		s.stratReg = stratReg
-		return nil
-	}
-}
-
-func EventRecorder(eventRecorder kuberecorder.EventRecorder) Opt {
-	return func(s *PromotionServer) error {
-		s.eventRecorder = eventRecorder
 		return nil
 	}
 }

@@ -137,8 +137,9 @@ spec:
                   out between the environments of this pipeline.
                 properties:
                   notification:
-                    description: Notification intended to be used when relying on
-                      notification-controller to push promotions elsewhere.
+                    description: Notification defines a promotion where an event is
+                      emitted through Flux's notification-controller each time an
+                      app is to be promoted.
                     type: object
                   pull-request:
                     description: PullRequest defines a promotion through a GitHub

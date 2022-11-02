@@ -20,7 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -32,18 +31,16 @@ const (
 )
 
 type DefaultPromotionHandler struct {
-	log           logr.Logger
-	c             client.Client
-	stratReg      strategy.StrategyRegistry
-	eventRecorder kuberecorder.EventRecorder
+	log      logr.Logger
+	c        client.Client
+	stratReg strategy.StrategyRegistry
 }
 
-func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client, eventRecorder kuberecorder.EventRecorder) DefaultPromotionHandler {
+func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client) DefaultPromotionHandler {
 	return DefaultPromotionHandler{
-		log:           log,
-		c:             c,
-		stratReg:      stratReg,
-		eventRecorder: eventRecorder,
+		log:      log,
+		c:        c,
+		stratReg: stratReg,
 	}
 }
 

@@ -49,10 +49,8 @@ func (g Notification) Promote(ctx context.Context, promSpec pipelinev1alpha1.Pro
 	}
 
 	metadata := map[string]string{
-		"pipelineName":      promotion.PipelineName,
-		"pipelineNamespace": promotion.PipelineNamespace,
-		"environment":       promotion.Environment.Name,
-		"version":           promotion.Version,
+		"environment": promotion.Environment.Name,
+		"version":     promotion.Version,
 	}
 
 	g.eventRecorder.AnnotatedEventf(p, metadata, corev1.EventTypeNormal, PromoteReason,

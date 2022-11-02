@@ -90,17 +90,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var eventRecorder *events.Recorder
-	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
-		setupLog.Error(err, "unable to create event recorder")
-		os.Exit(1)
-	}
-
 	if err = controllers.NewPipelineReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		controllerName,
-		eventRecorder,
 	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pipeline")
 		os.Exit(1)
@@ -123,6 +116,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	var eventRecorder *events.Recorder
+	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
+	}
 	notificationStrat, _ := notification.NewNotification(mgr.GetClient(), eventRecorder)
 
 	var stratReg strategy.StrategyRegistry
@@ -134,7 +132,6 @@ func main() {
 		server.Logger(log.WithName("promotion")),
 		server.ListenAddr(promServerAddr),
 		server.StrategyRegistry(stratReg),
-		server.EventRecorder(eventRecorder),
 	)
 	if err != nil {
 		setupLog.Error(err, "failed setting up promotion server")

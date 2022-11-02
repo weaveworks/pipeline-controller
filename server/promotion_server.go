@@ -76,7 +76,6 @@ func setDefaults(s *PromotionServer) {
 			s.log.WithName("handler"),
 			s.stratReg,
 			s.c,
-			s.eventRecorder,
 		)
 	}
 	if s.promEndpointName == "" {

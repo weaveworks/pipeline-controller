@@ -9,7 +9,7 @@ spec:
     kind: HelmRelease
     name: podinfo
   promotion:
-    noop: {}
+    notification: {}
   environments:
     - name: dev
       targets:

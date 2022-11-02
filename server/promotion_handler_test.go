@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
 )
 
 func createEvent() events.Event {
@@ -166,14 +165,14 @@ func TestGet(t *testing.T) {
 
 func TestPostWithWrongPath(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil)
 	resp := requestTo(g, h, http.MethodPost, "/", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
 
 func TestPostWithNoBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient)
 	createTestPipeline(g, t)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/env", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
@@ -181,7 +180,7 @@ func TestPostWithNoBody(t *testing.T) {
 
 func TestPostWithIncompatibleBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient)
 	createTestPipeline(g, t)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/env", nil, []byte("incompatible"))
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
@@ -189,7 +188,7 @@ func TestPostWithIncompatibleBody(t *testing.T) {
 
 func TestPostWithUnknownPipeline(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
@@ -215,7 +214,7 @@ func TestVerifyXSignature(t *testing.T) {
 			location: "success",
 		}
 		stratReg := strategy.StrategyRegistry{&strat}
-		h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, record.NewFakeRecorder(100))
+		h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 		return requestTo(g, h, http.MethodPost, "/default/app/dev", header, eventData)
 	}
 
@@ -270,7 +269,7 @@ func TestInvolvedObjectDoesntMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, nil)
+			h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 			ev := createEvent()
 			tt.transform(&ev)
 			resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, ev))
@@ -283,7 +282,7 @@ func TestInvolvedObjectDoesntMatch(t *testing.T) {
 func TestPromotionBeyondLastEnv(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/no-targets", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
 	g.Expect(resp.Body.String()).To(Equal("cannot promote beyond last environment no-targets"))
@@ -292,7 +291,7 @@ func TestPromotionBeyondLastEnv(t *testing.T) {
 func TestPromotionToEnvWithoutTarget(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/prod", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
 	g.Expect(resp.Body.String()).To(Equal("environment no-targets has no targets"))
@@ -301,7 +300,7 @@ func TestPromotionToEnvWithoutTarget(t *testing.T) {
 func TestPromotionFromUnknownEnv(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/foo", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
 	g.Expect(resp.Body.String()).To(Equal("app default/app has no environment foo defined"))
@@ -310,7 +309,7 @@ func TestPromotionFromUnknownEnv(t *testing.T) {
 func TestPromotionWithNoMetadataInEvent(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	ev := createEvent()
 	ev.Metadata = nil
 	resp := requestTo(g, h, http.MethodPost, "/default/app/foo", nil, marshalEvent(g, ev))
@@ -326,7 +325,7 @@ func TestPromotionStarted(t *testing.T) {
 		location: "success",
 	}
 	stratReg := strategy.StrategyRegistry{&strat}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, record.NewFakeRecorder(100))
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusCreated))
 	g.Expect(resp.Body.String()).To(Equal(""))
@@ -354,7 +353,7 @@ func TestPromotionFails(t *testing.T) {
 		err: fmt.Errorf("this didn't work"),
 	}
 	stratReg := strategy.StrategyRegistry{&strat}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, record.NewFakeRecorder(100))
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
 	g.Expect(resp.Body.String()).To(Equal("error promoting application, please consult the promotion server's logs"))
@@ -379,7 +378,7 @@ func TestPromotionWithoutLocation(t *testing.T) {
 	createTestPipelineWithPromotion(g, t)
 	strat := introspectableStrategy{}
 	stratReg := strategy.StrategyRegistry{&strat}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, record.NewFakeRecorder(100))
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusNoContent))
 	g.Expect(resp.Body.String()).To(Equal(""))
@@ -405,7 +404,7 @@ func TestPromotionWithoutPromotionSpec(t *testing.T) {
 	createTestPipeline(g, t)
 	strat := introspectableStrategy{}
 	stratReg := strategy.StrategyRegistry{&strat}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, nil)
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
 	g.Expect(resp.Body.String()).To(Equal("error promoting application, please consult the promotion server's logs"))
@@ -417,7 +416,7 @@ func TestPromotionWithoutUnknownStrategy(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipelineWithPromotion(g, t)
 	stratReg := strategy.StrategyRegistry{}
-	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, record.NewFakeRecorder(100))
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
 	g.Expect(resp.Body.String()).To(Equal("error promoting application, please consult the promotion server's logs"))
