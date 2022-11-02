@@ -15,13 +15,14 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
 	"github.com/weaveworks/pipeline-controller/server"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func createEvent() events.Event {

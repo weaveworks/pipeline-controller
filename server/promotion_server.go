@@ -15,7 +15,6 @@ import (
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
-	kuberecorder "k8s.io/client-go/tools/record"
 )
 
 type PromotionServer struct {
@@ -26,7 +25,6 @@ type PromotionServer struct {
 	promHandler      http.Handler
 	promEndpointName string
 	stratReg         strategy.StrategyRegistry
-	eventRecorder    kuberecorder.EventRecorder
 }
 
 type Opt func(s *PromotionServer) error
