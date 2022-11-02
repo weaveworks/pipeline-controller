@@ -10,6 +10,7 @@ controller:
       requests:
         cpu: 10m
         memory: 64Mi
+    eventsAddr: http://notification-controller.flux-system.svc.cluster.local./
   replicas: 1
 kubernetesClusterDomain: cluster.local
 promotion:

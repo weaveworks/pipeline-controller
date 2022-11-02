@@ -27,6 +27,7 @@ spec:
       containers:
       - args:
         - --leader-elect
+        - --events-addr={{ .Values.controller.manager.eventsAddr }}
         command:
         - /manager
         env:
