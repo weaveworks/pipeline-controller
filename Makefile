@@ -87,9 +87,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: helm-chart
 helm-chart: APP_VERSION=$(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
-helm-chart: helmify
-	$(KUSTOMIZE) build config/default | $(HELMIFY) --crd-dir $(CHART_PATH)
-	@grep -rle '{{ include "pipeline-controller.fullname" . }}-controller\(-manager\)*' $(CHART_PATH)/templates | xargs $(SED) -i 's/\({{ include "pipeline-controller.fullname" . }}\)-controller\(-manager\)*/\1/'
+helm-chart:
 	$(SED) -i 's/tag: latest/tag: ${APP_VERSION}/' $(CHART_PATH)/values.yaml
 	$(HELM) package $(CHART_PATH) --app-version=${APP_VERSION} --debug
 ##@ Build
@@ -155,14 +153,12 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 HELM ?= $(LOCALBIN)/helm
-HELMIFY ?= $(LOCALBIN)/helmify
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v4.5.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
 GOLANGCI_LINT_VERSION ?= v1.48.0
 HELM_VERSION ?= v3.10.0
-HELMIFY_VERSION ?= v0.3.18
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -189,8 +185,3 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 helm: $(HELM)
 $(HELM): $(LOCALBIN)
 	test -s $(LOCALBIN)/helm || { curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=$(LOCALBIN) bash -s -- --no-sudo --version $(HELM_VERSION); }
-
-.PHONY: helmify
-helmify: $(HELMIFY)
-$(HELMIFY): $(LOCALBIN)
-	test -s $(LOCALBIN)/helmify || GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@$(HELMIFY_VERSION)
