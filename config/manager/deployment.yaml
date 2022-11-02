@@ -1,28 +1,20 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: system
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: controller-manager
-  namespace: system
+  name: pipeline-controller
   labels:
-    control-plane: controller-manager
+    control-plane: controller
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      app: pipeline-controller
   replicas: 1
   template:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
       labels:
-        control-plane: controller-manager
+        app: pipeline-controller
     spec:
       securityContext:
         runAsNonRoot: true
@@ -34,13 +26,23 @@ spec:
         # seccompProfile:
         #   type: RuntimeDefault
       containers:
-      - command:
+      - name: manager
+        command:
         - /manager
         args:
         - --leader-elect
         image: controller:latest
         imagePullPolicy: IfNotPresent
-        name: manager
+        ports:
+          - containerPort: 8080
+            name: metrics
+            protocol: TCP
+          - containerPort: 8081
+            name: health
+            protocol: TCP
+          - containerPort: 8082
+            name: promotion
+            protocol: TCP
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -49,13 +51,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 8081
+            port: health
           initialDelaySeconds: 15
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /readyz
-            port: 8081
+            port: health
           initialDelaySeconds: 5
           periodSeconds: 10
         # TODO(user): Configure the resources accordingly based on the project requirements.
@@ -67,5 +69,5 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      serviceAccountName: controller-manager
+      serviceAccountName: pipeline-controller
       terminationGracePeriodSeconds: 10

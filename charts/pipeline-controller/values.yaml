@@ -1,19 +1,8 @@
-controllerManager:
-  kubeRbacProxy:
-    image:
-      repository: gcr.io/kubebuilder/kube-rbac-proxy
-      tag: v0.13.0
-    resources:
-      limits:
-        cpu: 500m
-        memory: 128Mi
-      requests:
-        cpu: 5m
-        memory: 64Mi
+controller:
   manager:
     image:
       repository: ghcr.io/weaveworks/pipeline-controller
-      tag: v0.0.1
+      tag: v0.0.2
     resources:
       limits:
         cpu: 500m
@@ -23,21 +12,25 @@ controllerManager:
         memory: 64Mi
   replicas: 1
 kubernetesClusterDomain: cluster.local
-managerConfig:
-  controllerManagerConfigYaml:
-    health:
-      healthProbeBindAddress: :8081
-    leaderElection:
-      leaderElect: true
-      resourceName: ecaf1259.my.domain
-    metrics:
-      bindAddress: 127.0.0.1:8080
-    webhook:
-      port: 9443
-metricsService:
-  ports:
-  - name: https
-    port: 8443
-    protocol: TCP
-    targetPort: https
-  type: ClusterIP
+promotion:
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8082
+    nodePort: ""
+    annotations: {}
+    labels: {}
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    labels: {}
+    hosts: []
+    # - host: chart-example.local
+    #   paths:
+    #     - path: /
+    #       pathType: ImplementationSpecific
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local

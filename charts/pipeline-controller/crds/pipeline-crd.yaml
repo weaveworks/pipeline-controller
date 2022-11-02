@@ -62,6 +62,16 @@ spec:
                   name:
                     description: Name of the referent.
                     type: string
+                  secretRef:
+                    description: SecrefRef reference the secret that contains a 'hmac-key'
+                      field with HMAC key used to authenticate webhook calls.
+                    properties:
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - name
+                    type: object
                 required:
                 - apiVersion
                 - kind
@@ -121,6 +131,44 @@ spec:
                   - targets
                   type: object
                 type: array
+              promotion:
+                description: Promotion defines details about how promotions are carried
+                  out between the environments of this pipeline.
+                properties:
+                  pull-request:
+                    description: PullRequest defines a promotion through a GitHub
+                      Pull Request.
+                    properties:
+                      branch:
+                        description: 'The branch to checkout after cloning. Note:
+                          This is just the base branch and does not denote the branch
+                          used to create a PR from. The latter is generated automatically
+                          and cannot be provided. If not specified the default "main"
+                          is used.'
+                        type: string
+                      secretRef:
+                        description: SecretRef specifies the Secret containing authentication
+                          credentials for the git repository and for the GitHub API.
+                          For HTTPS repositories the Secret must contain 'username'
+                          and 'password' fields. For SSH repositories the Secret must
+                          contain 'identity' and 'known_hosts' fields. For the GitHub
+                          API the Secret must contain a 'token' field.
+                        properties:
+                          name:
+                            description: Name of the referent.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      url:
+                        description: The git repository URL used to patch the manifests
+                          for promotion.
+                        type: string
+                    required:
+                    - secretRef
+                    - url
+                    type: object
+                type: object
             required:
             - appRef
             - environments
@@ -135,8 +183,8 @@ spec:
                   description: "Condition contains details for one aspect of the current
                     state of this API Resource. --- This struct is intended for direct
                     use as an array at the field path .status.conditions.  For example,
-                    type FooStatus struct{ // Represents the observations of a foo's
-                    current state. // Known .status.conditions.type are: \"Available\",
+                    \n type FooStatus struct{ // Represents the observations of a
+                    foo's current state. // Known .status.conditions.type are: \"Available\",
                     \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
                     // +listType=map // +listMapKey=type Conditions []metav1.Condition
                     `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"

@@ -1,20 +1,17 @@
-# permissions for end users to edit pipelines.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: pipeline-editor
+  name: {{ include "pipeline-controller.fullname" . }}-viewer
+  labels:
+  {{- include "pipeline-controller.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - pipelines.weave.works
   resources:
   - pipelines
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - pipelines.weave.works
