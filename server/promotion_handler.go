@@ -138,7 +138,6 @@ func (h DefaultPromotionHandler) promote(ctx context.Context, p pipelinev1alpha1
 		return nil, fmt.Errorf("error getting strategy from registry: %w", err)
 	}
 	return strat.Promote(ctx, *promotionSpec, prom)
-
 }
 
 // lookupNextEnvironment searches the pipeline for the given environment name and returns the subsequent environment. The given pipeline's appRef
@@ -163,6 +162,7 @@ func lookupNextEnvironment(pipeline pipelinev1alpha1.Pipeline, env string, appRe
 	if len(promEnv.Targets) == 0 {
 		return nil, fmt.Errorf("environment %s has no targets", promEnv.Name)
 	}
+
 	if pipeline.Spec.AppRef.APIVersion != appRef.APIVersion ||
 		pipeline.Spec.AppRef.Kind != appRef.Kind ||
 		pipeline.Spec.AppRef.Name != appRef.Name ||

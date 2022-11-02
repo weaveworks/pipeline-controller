@@ -136,6 +136,11 @@ spec:
                 description: Promotion defines details about how promotions are carried
                   out between the environments of this pipeline.
                 properties:
+                  notification:
+                    description: Notification defines a promotion where an event is
+                      emitted through Flux's notification-controller each time an
+                      app is to be promoted.
+                    type: object
                   pull-request:
                     description: PullRequest defines a promotion through a GitHub
                       Pull Request.

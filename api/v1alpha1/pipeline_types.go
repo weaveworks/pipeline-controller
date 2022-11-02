@@ -64,6 +64,9 @@ type Promotion struct {
 	// PullRequest defines a promotion through a GitHub Pull Request.
 	// +optional
 	PullRequest *PullRequestPromotion `json:"pull-request,omitempty"`
+	// Notification defines a promotion where an event is emitted through Flux's notification-controller each time an app is to be promoted.
+	// +optional
+	Notification *NotificationPromotion `json:"notification,omitempty"`
 }
 
 type PullRequestPromotion struct {
@@ -86,6 +89,8 @@ type PullRequestPromotion struct {
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
+
+type NotificationPromotion struct{}
 
 type PipelineStatus struct {
 	// ObservedGeneration is the last observed generation.
