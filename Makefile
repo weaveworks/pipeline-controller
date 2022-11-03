@@ -85,6 +85,10 @@ verify-tidy: tidy
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+.PHONY: lint-chart
+lint-chart:
+	ct lint --config ct.yaml --target-branch main
+
 .PHONY: helm-chart
 helm-chart: APP_VERSION=$(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
 helm-chart:
@@ -158,7 +162,7 @@ HELM ?= $(LOCALBIN)/helm
 KUSTOMIZE_VERSION ?= v4.5.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
 GOLANGCI_LINT_VERSION ?= v1.48.0
-HELM_VERSION ?= v3.10.0
+HELM_VERSION ?= v3.10.1
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
