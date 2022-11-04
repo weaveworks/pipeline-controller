@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "charts/**" # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-status-checks#handling-skipped-but-required-checks
   pull_request_target:
     types:
       - closed
@@ -26,6 +28,11 @@ jobs:
         echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" > ~/.netrc
     - name: Lint
       run: make lint
+
+  lint-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "No lint for Helm chart required"'
 
   verify-tidy:
     runs-on: ubuntu-latest
