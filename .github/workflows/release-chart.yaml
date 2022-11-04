@@ -9,7 +9,7 @@ on:
 
 jobs:
   lint-chart:
-    uses: ./.github/workflows/ci-chart.yml
+    uses: ./.github/workflows/ci-chart.yaml
   release-chart:
     runs-on: ubuntu-latest
     steps:
