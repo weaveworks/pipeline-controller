@@ -9,7 +9,7 @@ on:
       - closed
 
 jobs:
-  test:
+  snyk-test:
     runs-on: ubuntu-latest
     permissions:
       contents: read # for actions/checkout to fetch code
@@ -31,7 +31,7 @@ jobs:
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN_WEAVEWORKS_ALL }}
 
-  monitor:
+  snyk-monitor:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
