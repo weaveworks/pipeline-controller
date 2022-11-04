@@ -90,10 +90,8 @@ lint-chart:
 	ct lint --config ct.yaml --target-branch main
 
 .PHONY: helm-chart
-helm-chart: APP_VERSION=$(shell echo "$$(git describe --tags "$$(git rev-parse "HEAD^{commit}")^{commit}" --match v* 2>/dev/null || git rev-parse "HEAD^{commit}")$$([ -z "$$(git status --porcelain 2>/dev/null)" ] || echo -dirty)")
 helm-chart:
-	$(SED) -i 's/tag: latest/tag: ${APP_VERSION}/' $(CHART_PATH)/values.yaml
-	$(HELM) package $(CHART_PATH) --app-version=${APP_VERSION} --debug
+	$(HELM) package $(CHART_PATH)
 ##@ Build
 
 .PHONY: build
@@ -118,7 +116,7 @@ release: docker-push
 
 .PHONY: helm-release
 helm-release: VERSION=$(shell echo "$$(grep "version: "  ./charts/pipeline-controller/Chart.yaml | awk '{print $$2}')")
-helm-release: kustomize helm helm-chart
+helm-release: helm helm-chart
 	$(HELM) push pipeline-controller-${VERSION}.tgz oci://${CHART_REGISTRY}
 
 ##@ Deployment
