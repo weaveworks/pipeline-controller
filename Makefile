@@ -85,6 +85,10 @@ verify-tidy: tidy
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+.PHONY: lint-and-install-chart
+lint-and-install-chart:
+	ct lint-and-install --config ct.yaml --target-branch main
+
 .PHONY: lint-chart
 lint-chart:
 	ct lint --config ct.yaml --target-branch main
