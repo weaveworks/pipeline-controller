@@ -28,11 +28,25 @@ Testing on this controller follows closely what is done by default in `kubebuild
 
 ## Releasing
 
-To make a new release, run the following commands:
+This repository hosts the sources for two artifacts, a container image and a Helm chart. Both are released independently.
+
+### Releasing a new image version
+
+To make a new release of the application image, run the following commands:
 
 ```sh
+# set the version appropriately
+export VERSION=vX.Y.Z
 git checkout main
 git pull
-git tag -a -s v0.0.1 -m "Pipeline controller v0.0.1"
-git push origin v0.0.1
+git tag -sam "Pipeline controller $VERSION" $VERSION
+git push origin $VERSION
 ```
+
+Pushing the tag will initiate a GitHub Actions workflow that builds and pushes the multi-platform container image [ghcr.io/weaveworks/pipeline-controller](https://github.com/weaveworks/pipeline-controller/pkgs/container/pipeline-controller).
+
+Usually, when a new image version is published, a new chart version needs to be released as well. See below for instructions on that process.
+
+### Releasing a new chart version
+
+The [pipeline-controller](./charts/pipeline-controller) chart is automatically released as an OCI artifact at [ghcr.io/weaveworks/charts/pipeline-controller](https://github.com/weaveworks/pipeline-controller/pkgs/container/charts%2Fpipeline-controller) whenever changes to it are merged into the `main` branch. CI checks are in place that verify any change to the chart is accompanied by a version bump to prevent overwriting existing chart versions.
