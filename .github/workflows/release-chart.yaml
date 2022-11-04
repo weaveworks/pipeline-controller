@@ -11,6 +11,7 @@ jobs:
   lint-chart:
     uses: ./.github/workflows/ci-chart.yaml
   release-chart:
+    needs: [lint-chart]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
