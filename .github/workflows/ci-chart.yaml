@@ -7,6 +7,19 @@ on:
   workflow_call:
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Not required"'
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Not required"'
+  verify-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Not required"'
+
   lint-chart:
     runs-on: ubuntu-latest
     steps:
