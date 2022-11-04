@@ -2,7 +2,6 @@ controller:
   manager:
     image:
       repository: ghcr.io/weaveworks/pipeline-controller
-      tag: v0.0.2
     resources:
       limits:
         cpu: 500m
