@@ -19,6 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: 'echo "Not required"'
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Not required"'
 
   lint-chart:
     runs-on: ubuntu-latest
