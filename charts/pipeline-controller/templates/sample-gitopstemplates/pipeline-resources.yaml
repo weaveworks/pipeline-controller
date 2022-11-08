@@ -1,0 +1,53 @@
+apiVersion: clustertemplates.weave.works/v1alpha1
+kind: GitOpsTemplate
+metadata:
+  name: pipeline-leaf-cluster-resources
+  namespace: flux-system
+  annotations:
+    # These annotations remove irrelevant fields for Pipeline creation.
+    # In a future release, this will become the default behaviour and
+    # they could be removed from this template.
+    templates.weave.works/profiles-enabled: false
+    templates.weave.works/kustomizations-enabled: false
+    templates.weave.works/credentials-enabled: false
+  labels:
+    # This label determines the "Type" value for listing Templates in
+    # the dashboard.
+    weave.works/template-type: application
+spec:
+  description: Creates flux notification controller resources required for promoting applications via pipelines.
+  params:
+    # Pipeline parameters
+    - name: RESOURCE_NAME # Required parameter name for a valid template
+      description: Name for the generated objects, should match the target Application (Helm Release) name.
+    - name: RESOURCE_NAMESPACE # Required parameter name for a valid template
+      description: Namespace for the generated objects, should match the target Application (Helm Release) namespace.
+    - name: HOST_URL # Required parameter name for a valid template
+      description: URL for the promotion webhook on the management cluster
+    - name: ENV_NAME
+      descripton: Environment the cluster is a part of within a pipeline.
+  resourcetemplates:
+  - apiVersion: notification.toolkit.fluxcd.io/v1beta1
+    kind: Provider
+    metadata:
+      name: ${RESOURCE_NAME}
+      namespace: ${RESOURCE_NAMESPACE}
+    spec:
+      address: http://${HOST_URL}/default/${APP_NAME}/${ENV_NAME}
+      type: generic
+  - apiVersion: notification.toolkit.fluxcd.io/v1beta1
+    kind: Alert
+    metadata:
+      name: ${RESORUCE_NAME}
+      namespace: ${RESOURCE_NAMESPACE}
+    spec:
+      providerRef:
+        name: ${RESOURCE_NAME}
+      eventSeverity: info
+      eventSources:
+        - kind: HelmRelease
+          name: ${RESOURCE_NAME}
+      exclusionList:
+        - ".*upgrade.*has.*started"
+        - ".*is.*not.*ready"
+        - "^Dependencies.*"

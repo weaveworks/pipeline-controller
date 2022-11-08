@@ -1,0 +1,78 @@
+apiVersion: clustertemplates.weave.works/v1alpha1
+kind: GitOpsTemplate
+metadata:
+  name: pr-promotion-namespace-tenancy
+  namespace: flux-system
+  annotations:
+    # These annotations remove irrelevant fields for Pipeline creation.
+    # In a future release, this will become the default behaviour and
+    # they could be removed from this template.
+    templates.weave.works/profiles-enabled: false
+    templates.weave.works/kustomizations-enabled: false
+    templates.weave.works/credentials-enabled: false
+  labels:
+    # This label determines the "Type" value for listing Templates in
+    # the dashboard. The link to "Create a Pipeline" uses this value
+    # to pre-filter the list.
+    weave.works/template-type: pipeline
+spec:
+  description: Sample pipeline to promote a Helm Release version via Pull Request across hard-coded Dev, Test and Prod environments.
+  params:
+    # Pipeline parameters
+    - name: RESOURCE_NAME # Required parameter name for a valid template
+      description: Name of the Pipeline
+    - name: RESOURCE_NAMESPACE
+      description: Namespace for the Pipeline on the management cluster
+    # Application parameters - this template assumes consistent HelmRelease name and namespace across clusters
+    - name: APP_NAME
+      description: Name of the HelmRelease for your application
+    - name: APP_NAMESPACE
+      description: Namespace for the HelmRelease
+    - name: APP_REPO_URL
+      description: URL for source of HelmRelease in Git
+    - name: APP_REPO_BRANCH
+      description: Branch to write updates to in Git
+    - name: GIT_CREDENTIALS_SECRET
+      description: Name of the secret in RESOURCE_NAMESPACE containing credentials to create pull requests
+  resourcetemplates:
+  - apiVersion: pipelines.weave.works/v1alpha1
+    kind: pipeline
+    metadata:
+      name: ${RESOURCE_NAME}
+      namespace: ${RESOURCE_NAMESPACE}
+    spec:
+      appRef:
+        apiVersion: helm.toolkit.fluxcd.io/v2beta1
+        kind: helmrelease
+        name: ${APP_NAME}
+      environments:
+      # This template example enforces which clusters an application team deploys to, but allows
+      # the association of an app by HelmRelease name and namespace. A similar template would 
+      # support teams using isolation by namespace as a tenancy model.
+      - name: dev
+        targets:
+          - namespace: ${APP_NAMESPACE}
+            clusterRef:
+              kind: GitopsCluster
+              name: Dev
+              namespace: flux-system
+      - name: test
+        targets:
+          - namespace: ${APP_NAMESPACE}
+            clusterRef:
+              kind: GitopsCluster
+              name: Test
+              namespace: flux-system
+      - name: prod
+        targets:
+          - namespace: ${APP_NAMESPACE}
+            clusterRef:
+              kind: GitopsCluster
+              name: Prod
+              namespace: flux-system
+      promotion:
+        pull-request:
+            url: ${APP_REPO_URL}
+            branch: ${APP_REPO_BRANCH}
+            secretRef:
+            name: ${GIT_CREDENTIALS_SECRET}
