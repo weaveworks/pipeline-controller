@@ -36,7 +36,7 @@ spec:
       description: Name of the secret in RESOURCE_NAMESPACE containing credentials to create pull requests
   resourcetemplates:
   - apiVersion: pipelines.weave.works/v1alpha1
-    kind: pipeline
+    kind: Pipeline
     metadata:
       name: ${RESOURCE_NAME}
       namespace: ${RESOURCE_NAMESPACE}

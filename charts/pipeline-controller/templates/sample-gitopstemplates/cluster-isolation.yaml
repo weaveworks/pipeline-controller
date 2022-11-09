@@ -49,7 +49,7 @@ spec:
       description: Namespace of GitopsCluster object for Prod environment
   resourcetemplates:
   - apiVersion: pipelines.weave.works/v1alpha1
-    kind: pipeline
+    kind: Pipeline
     metadata:
       name: ${RESOURCE_NAME}
       namespace: ${RESOURCE_NAMESPACE}
