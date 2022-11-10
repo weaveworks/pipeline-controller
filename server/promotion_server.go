@@ -12,6 +12,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
@@ -86,6 +87,7 @@ func (s PromotionServer) Start(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.Handle(pathPrefix, http.StripPrefix(s.promEndpointName, s.promHandler))
+	mux.Handle("/healthz", healthz.CheckHandler{Checker: healthz.Ping})
 
 	srv := http.Server{
 		Addr:    s.listener.Addr().String(),
