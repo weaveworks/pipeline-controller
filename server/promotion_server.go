@@ -86,6 +86,9 @@ func (s PromotionServer) Start(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.Handle(pathPrefix, http.StripPrefix(s.promEndpointName, s.promHandler))
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	})
 
 	srv := http.Server{
 		Addr:    s.listener.Addr().String(),
