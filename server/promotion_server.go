@@ -84,10 +84,14 @@ func setDefaults(s *PromotionServer) {
 func (s PromotionServer) Start(ctx context.Context) error {
 	pathPrefix := "/promotion/"
 
+	log := s.log.WithValues("kind", "promotion webhook", "path", pathPrefix, "addr", s.listener.Addr())
+
 	mux := http.NewServeMux()
 	mux.Handle(pathPrefix, http.StripPrefix(s.promEndpointName, s.promHandler))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		if _, err := w.Write([]byte("ok")); err != nil {
+			log.Error(err, "failed sending health response")
+		}
 	})
 
 	srv := http.Server{
@@ -96,7 +100,6 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		log := s.log.WithValues("kind", "promotion webhook", "path", pathPrefix, "addr", s.listener.Addr())
 		log.Info("Starting server")
 		if err := srv.Serve(s.listener); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
