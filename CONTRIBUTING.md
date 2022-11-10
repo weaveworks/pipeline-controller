@@ -25,6 +25,65 @@ make test
 
 Testing on this controller follows closely what is done by default in `kubebuilder` although we ditched the use of `Gomega` in favor of native Go testing structure. As an example on how to write tests for this controller you can take a look at Kubebuilder [docs](https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html#writing-controller-tests) for reference.
 
+## Working with promotions
+
+In order to test promotion of an application from one environment to another you need to set up several resources:
+
+1. Create a [GitHub personal access token](https://github.com/settings/tokens). This token needs to provide permission to create PRs (i.e. it needs `repo` scope for private repositories). If you intend to use the same token for cloning the Git repository, make sure the permission to do so is also provided by that token, especially when you're using the new fine-grained tokens.
+
+1. Create a Secret containing authentication credentials for cloning your Git repository (see the Pipeline CRD's documentation of the `spec.promotion.pull-request.secretRef` field for the details on this). Example command to create such a Secret (if you have 2FA enabled for your GitHub account you can't use your GitHub password for cloning repos. In that case just use the token you created above and make sure it has permission to clone the repository):
+
+   ```sh
+   $ k create secret generic promotion-credentials --from-literal=username=GITHUB_USERNAME --from-literal=password=GITHUB_PASSWORD --from-literal=token=GITHUB_TOKEN --dry-run=client -o yaml
+   ```
+
+2. Define a pipeline with at least two environments and a promotion configuration. An example pipeline manifest can be found in [`/config/testdata/pipeline.yaml`](/config/testdata/pipeline.yaml). Note that you can define different environments on the same cluster so all you need is one cluster and use different namespaces on it, one for each environment. Don't forget to set the `spec.promotion.pull-request.secretRef` field to point to the secret you created in the previous step.
+
+3. Create manifests in your Git repo for a namespace for each environment and one HelmRelease for the application you want to use for testing (e.g. podinfo) for each of the namespaces.
+
+4. Add a promotion marker to the HelmRelease's `.spec.chart.spec.version` field to the manifest of the second environment. In the example below a marker for the Pipeline object `podinfo` in the namespace `default` and the target environment `prod` is added.
+   ```yaml
+   apiVersion: helm.toolkit.fluxcd.io/v2beta1
+   kind: HelmRelease
+   [...]
+   spec:
+     chart:
+       spec:
+         version: 6.2.0 # {"$promotion": "default:podinfo:prod"}
+   [...]
+   ```
+
+5. Create a `Provider` and an `Alert` for notification-controller to call out to the promotion webhook whenever the version of the first environment is changed. The Provider must look similar to this:
+
+   ```yaml
+   apiVersion: notification.toolkit.fluxcd.io/v1beta1
+   kind: Provider
+   [...]
+   spec:
+     address: "http://pipeline-promotion.pipeline-system.svc/promotion/default/podinfo/dev"
+     type: generic
+   [...]
+   ```
+
+   The Alert must look like this (make sure to edit the event source and the `providerRef`):
+
+   ```yaml
+   apiVersion: notification.toolkit.fluxcd.io/v1beta1
+   kind: Alert
+   [...]
+   spec:
+     eventSeverity: info
+     eventSources:
+     - kind: HelmRelease
+       name: podinfo
+     exclusionList:
+     - .*upgrade.*has.*started
+     - .*is.*not.*ready
+     - ^Dependencies.*
+     providerRef:
+       name: promotion-podinfo
+
+6. For testing promotion you can suspend the HelmRelease in the first environment and resume it. This will cause notification-controller to send an event the promotion webhook.
 
 ## Releasing
 
