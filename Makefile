@@ -56,6 +56,7 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=pipeline-controller crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	cp ./config/crd/bases/pipelines.weave.works_pipelines.yaml ./charts/pipeline-controller/crds/pipeline-crd.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
