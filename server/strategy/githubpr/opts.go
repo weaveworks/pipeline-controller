@@ -4,7 +4,7 @@ type Opt func(g *GitHubPR) error
 
 func GitHubClientFactory(cf ClientFactory) Opt {
 	return func(g *GitHubPR) error {
-		g.githubClientFactory = cf
+		g.gitClientFactory = cf
 		return nil
 	}
 }
