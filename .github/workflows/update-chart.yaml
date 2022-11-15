@@ -1,0 +1,41 @@
+name: Update app in chart
+on:
+  registry_package:
+    types:
+      - published
+jobs:
+  update-chart:
+    if: ${{ github.event.registry_package.name == 'pipeline-controller' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: bump app version
+        uses: mikefarah/yq@v4.30.4
+        with:
+          cmd: yq -i '.appVersion = "${{ github.event.registry_package.package_version.container_metadata.tag.name }}"' charts/pipeline-controller/Chart.yaml
+      - name: get chart version
+        id: get_chart_version
+        uses: mikefarah/yq@v4.30.4
+        with:
+          cmd: yq '.version' charts/pipeline-controller/Chart.yaml
+      - name: increment chart version
+        run: echo ${{ steps.get_chart_version.outputs.result }} awk -F. -v OFS=. '{print $1,++$2,0}'
+      - name: update chart version
+        uses: mikefarah/yq@v4.30.4
+        with:
+          cmd: yq -i '.version = "${{ steps.get_chart_version.outputs.result }}"' charts/pipeline-controller/Chart.yaml
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v4
+        with:
+          commit-message: |
+            Update app version in chart
+          committer: GitHub <noreply@github.com>
+          author: weaveworks-admin-bot <41998074+weaveworks-admin-bot@users.noreply.github.com>
+          branch: update-chart
+          title: Update app version in chart
+      - name: Check output
+        run: |
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"

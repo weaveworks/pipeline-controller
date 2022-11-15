@@ -104,7 +104,7 @@ git push origin $VERSION
 
 Pushing the tag will initiate a GitHub Actions workflow that builds and pushes the multi-platform container image [ghcr.io/weaveworks/pipeline-controller](https://github.com/weaveworks/pipeline-controller/pkgs/container/pipeline-controller).
 
-Usually, when a new image version is published, a new chart version needs to be released as well. See below for instructions on that process.
+Releasing a new image version will cause a GitHub Actions workflow to be kicked off that bumps the app version in the chart as well as the chart version itself and creates a PR from those changes. Merging that PR will kick off the chart release process as outlined below.
 
 ### Releasing a new chart version
 
