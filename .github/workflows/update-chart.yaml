@@ -20,7 +20,7 @@ jobs:
         with:
           cmd: yq '.version' charts/pipeline-controller/Chart.yaml
       - name: increment chart version
-        run: echo ${{ steps.get_chart_version.outputs.result }} awk -F. -v OFS=. '{print $1,++$2,0}'
+        run: echo ${{ steps.get_chart_version.outputs.result }} | awk -F. -v OFS=. '{print $1,++$2,0}'
       - name: update chart version
         uses: mikefarah/yq@v4.30.4
         with:
