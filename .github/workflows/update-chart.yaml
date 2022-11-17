@@ -10,6 +10,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Import GPG key for signing commits
+        uses: crazy-max/ghaction-import-gpg@v3
+        with:
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git-user-signingkey: true
+          git-commit-gpgsign: true
       - name: bump app version
         uses: mikefarah/yq@v4.30.4
         with:
@@ -33,8 +40,8 @@ jobs:
           token: ${{ secrets.GHCR_TOKEN }}
           commit-message: |
             Update app version in chart
-          committer: GitHub <noreply@github.com>
-          author: weaveworks-admin-bot <41998074+weaveworks-admin-bot@users.noreply.github.com>
+          committer: wge-build-bot <90634764+wge-build-bot@users.noreply.github.com>
+          author: wge-build-bot <90634764+wge-build-bot@users.noreply.github.com>
           branch: update-chart
           title: Update app version to ${{ github.event.registry_package.package_version.container_metadata.tag.name }} in chart
           body: |
