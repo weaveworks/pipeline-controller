@@ -8,6 +8,8 @@ jobs:
     if: ${{ github.event.registry_package.name == 'pipeline-controller' }}
     runs-on: ubuntu-latest
     steps:
+      - name: dump event
+        run: echo ${{ toJson(github.event) }}
       - name: Checkout
         uses: actions/checkout@v3
       - name: bump app version
@@ -20,11 +22,12 @@ jobs:
         with:
           cmd: yq '.version' charts/pipeline-controller/Chart.yaml
       - name: increment chart version
+        id: inc_chart_version
         run: echo ${{ steps.get_chart_version.outputs.result }} | awk -F. -v OFS=. '{print $1,++$2,0}'
       - name: update chart version
         uses: mikefarah/yq@v4.30.4
         with:
-          cmd: yq -i '.version = "${{ steps.get_chart_version.outputs.result }}"' charts/pipeline-controller/Chart.yaml
+          cmd: yq -i '.version = "${{ steps.inc_chart_version.outputs.result }}"' charts/pipeline-controller/Chart.yaml
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v4
