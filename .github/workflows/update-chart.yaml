@@ -36,7 +36,11 @@ jobs:
           committer: GitHub <noreply@github.com>
           author: weaveworks-admin-bot <41998074+weaveworks-admin-bot@users.noreply.github.com>
           branch: update-chart
-          title: Update app version in chart
+          title: Update app version to ${{ github.event.registry_package.package_version.container_metadata.tag.name }} in chart
+          body: |
+            This PR bumps the minor chart version by default. If it is more appropriate to bump the major or the patch versions, please amend the commit accordingly.
+
+            The workflow that this PR was created from is "${{ github.workflow }}".
       - name: Check output
         run: |
           echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
