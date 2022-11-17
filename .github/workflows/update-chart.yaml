@@ -21,11 +21,11 @@ jobs:
           cmd: yq '.version' charts/pipeline-controller/Chart.yaml
       - name: increment chart version
         id: inc_chart_version
-        run: echo ${{ steps.get_chart_version.outputs.result }} | awk -F. -v OFS=. '{print $1,++$2,0}'
+        run: echo NEW_CHART_VERSION=$(echo ${{ steps.get_chart_version.outputs.result }} | awk -F. -v OFS=. '{print $1,++$2,0}') >> $GITHUB_OUTPUT
       - name: update chart version
         uses: mikefarah/yq@v4.30.4
         with:
-          cmd: yq -i '.version = "${{ steps.inc_chart_version.outputs.result }}"' charts/pipeline-controller/Chart.yaml
+          cmd: yq -i '.version = "${{ steps.inc_chart_version.outputs.NEW_CHART_VERSION }}"' charts/pipeline-controller/Chart.yaml
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v4
