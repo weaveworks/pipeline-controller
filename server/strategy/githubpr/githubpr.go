@@ -3,14 +3,13 @@ package githubpr
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
+	"github.com/fluxcd/go-git-providers/github"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/git"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v47/github"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -19,9 +18,9 @@ import (
 )
 
 type GitHubPR struct {
-	c                   client.Client
-	log                 logr.Logger
-	githubClientFactory ClientFactory
+	c                client.Client
+	log              logr.Logger
+	gitClientFactory ClientFactory
 }
 
 var (
@@ -48,11 +47,8 @@ func NewGitHubPR(c client.Client, log logr.Logger, opts ...Opt) (*GitHubPR, erro
 }
 
 func setDefaults(g *GitHubPR) {
-	if g.githubClientFactory == nil {
-		g.githubClientFactory = func(c *http.Client) GitHubClient {
-			ghc := github.NewClient(c)
-			return DelegatingGitHubClient{ghc}
-		}
+	if g.gitClientFactory == nil {
+		g.gitClientFactory = github.NewClient
 	}
 }
 
@@ -126,10 +122,10 @@ func (g GitHubPR) Promote(ctx context.Context, promSpec pipelinev1alpha1.Promoti
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PR: %w", err)
 	}
-	log.Info("created PR", "pr", pr.HTMLURL)
+	log.Info("created PR", "pr", pr.Get().WebURL)
 
 	return &strategy.PromotionResult{
-		Location: *pr.HTMLURL,
+		Location: pr.Get().WebURL,
 	}, nil
 }
 

@@ -66,6 +66,10 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+.PHONY: go-generate
+go-generate:
+	PATH=$(PATH):$(LOCALBIN) go generate ./...
+
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
@@ -160,12 +164,19 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 HELM ?= $(LOCALBIN)/helm
+MOCKGEN ?= $(LOCALBIN)/mockgen
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v4.5.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
 GOLANGCI_LINT_VERSION ?= v1.48.0
 HELM_VERSION ?= v3.10.1
+MOCKGEN_VERSION ?= v1.6.0
+
+.PHONY: mockgen
+mockgen: $(MOCKGEN)
+$(MOCKGEN): $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install github.com/golang/mock/mockgen@$(MOCKGEN_VERSION)
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize

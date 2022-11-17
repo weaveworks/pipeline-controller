@@ -1,13 +1,15 @@
 package githubpr_test
 
+//go:generate mockgen -destination mock_gitprovider_test.go -package githubpr_test github.com/fluxcd/go-git-providers/gitprovider Client,UserRepositoriesClient,UserRepository,PullRequestClient,PullRequest
+
 import (
 	"context"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/fluxcd/go-git-providers/gitprovider"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/logger"
@@ -17,11 +19,10 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
-	"github.com/google/go-github/v47/github"
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -142,33 +143,9 @@ func initTestTLS() ([]byte, []byte, []byte) {
 	return tlsPublicKey, tlsPrivateKey, tlsCA
 }
 
-type mockGitHubClient struct {
-	prs []*github.PullRequest
-}
-
-func (m *mockGitHubClient) PullRequests() githubpr.PullRequestClient {
-	return m
-}
-
-func (m *mockGitHubClient) Create(ctx context.Context, owner string, repo string, pull *github.NewPullRequest) (*github.PullRequest, *github.Response, error) {
-	newPR := &github.PullRequest{
-		HTMLURL: pointer.String("location"),
-	}
-	m.prs = append(m.prs, newPR)
-	return newPR, nil, nil
-}
-
-func (m *mockGitHubClient) List(ctx context.Context, owner string, repo string, opts *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error) {
-	return m.prs, nil, nil
-}
-
-func (m *mockGitHubClient) Edit(ctx context.Context, owner string, repo string, number int, pull *github.PullRequest) (*github.PullRequest, *github.Response, error) {
-	panic("not implemented") // TODO: Implement
-}
-
-func mockGitHubClientFactory() func(c *http.Client) githubpr.GitHubClient {
-	return func(c *http.Client) githubpr.GitHubClient {
-		return &mockGitHubClient{}
+func mockGitHubClientFactory(c gitprovider.Client) githubpr.ClientFactory {
+	return func(_ ...gitprovider.ClientOption) (gitprovider.Client, error) {
+		return c, nil
 	}
 }
 
@@ -220,13 +197,14 @@ func TestPromote(t *testing.T) {
 		ca             []byte
 	}
 	tests := []struct {
-		name       string
-		promSpec   v1alpha1.Promotion
-		promotion  strategy.Promotion
-		apiObjects []client.Object
-		server     *gitServerConfig
-		err        error
-		errPattern string
+		name         string
+		promSpec     v1alpha1.Promotion
+		promotion    strategy.Promotion
+		apiObjects   []client.Object
+		server       *gitServerConfig
+		err          error
+		errPattern   string
+		gitMockSetup func(*gomock.Controller, v1alpha1.Promotion) (gitprovider.Client, error)
 	}{
 		{
 			"nil PullRequest spec",
@@ -238,6 +216,7 @@ func TestPromote(t *testing.T) {
 			nil,
 			githubpr.ErrSpecIsNil,
 			"",
+			nil,
 		},
 		{
 			"Secret not specified",
@@ -249,6 +228,7 @@ func TestPromote(t *testing.T) {
 			nil,
 			nil,
 			"failed to fetch credentials: failed to fetch Secret: secrets \"\" not found",
+			nil,
 		},
 		{
 			"no repo URL specified",
@@ -273,6 +253,7 @@ func TestPromote(t *testing.T) {
 			nil,
 			nil,
 			"failed to clone repo: failed configuring auth opts for repo URL \"\": no transport type set",
+			nil,
 		},
 		{
 			"repo URL is invalid",
@@ -298,6 +279,7 @@ func TestPromote(t *testing.T) {
 			nil,
 			nil,
 			"failed to clone repo: failed cloning repository: unable to clone: repository not found: git repository: 'https://example.org'",
+			nil,
 		},
 		{
 			"no GitHub token",
@@ -326,6 +308,7 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			"failed to create PR: GitHub token is empty",
+			nil,
 		},
 		{
 			"missing/invalid credentials",
@@ -356,6 +339,7 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			"failed to clone repo: failed cloning repository: unable to clone '.*': authentication required",
+			nil,
 		},
 		{
 			"HTTP scheme not supported",
@@ -391,6 +375,7 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			"failed to create PR: failed parsing GitHub URL: unsupported URL scheme, only HTTPS supported",
+			nil,
 		},
 		{
 			"happy path with auth",
@@ -430,6 +415,23 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			"",
+			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion) (gitprovider.Client, error) {
+				repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.PullRequest.URL)
+				if err != nil {
+					return nil, err
+				}
+				mockGitClient := NewMockClient(mockCtrl)
+				mockRepoClient := NewMockUserRepositoriesClient(mockCtrl)
+				mockRepo := NewMockUserRepository(mockCtrl)
+				mockPRClient := NewMockPullRequestClient(mockCtrl)
+				mockRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockRepo, nil)
+				mockGitClient.EXPECT().UserRepositories().Return(mockRepoClient)
+				mockRepo.EXPECT().PullRequests().Return(mockPRClient)
+				mockPR := NewMockPullRequest(mockCtrl)
+				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), gomock.Any()).Return(mockPR, nil)
+				return mockGitClient, nil
+			},
 		},
 	}
 
@@ -437,11 +439,7 @@ func TestPromote(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := testingutils.NewGomegaWithT(t)
 			fc := fake.NewClientBuilder().WithObjects(tt.apiObjects...).Build()
-			mockCF := mockGitHubClientFactory()
-			strat, err := githubpr.NewGitHubPR(fc, logger.NewLogger(logger.Options{}), githubpr.GitHubClientFactory(mockCF))
-			if err != nil {
-				t.Fatalf("unable to create GitHub promotion strategy: %s", err)
-			}
+
 			if tt.server != nil {
 				server, err := gittestserver.NewTempGitServer()
 				g.Expect(err).NotTo(HaveOccurred())
@@ -465,6 +463,20 @@ func TestPromote(t *testing.T) {
 				})
 				tt.promSpec.PullRequest.URL = server.HTTPAddress() + repoPath
 			}
+
+			var gitClient gitprovider.Client
+			if tt.gitMockSetup != nil {
+				mockCtrl := gomock.NewController(t)
+				var err error
+				gitClient, err = tt.gitMockSetup(mockCtrl, tt.promSpec)
+				g.Expect(err).NotTo(HaveOccurred(), "failed setting up mocks")
+			}
+			mockCF := mockGitHubClientFactory(gitClient)
+			strat, err := githubpr.NewGitHubPR(fc, logger.NewLogger(logger.Options{}), githubpr.GitHubClientFactory(mockCF))
+			if err != nil {
+				t.Fatalf("unable to create GitHub promotion strategy: %s", err)
+			}
+
 			res, err := strat.Promote(context.Background(), tt.promSpec, tt.promotion)
 			if tt.err != nil {
 				g.Expect(err).To(Equal(tt.err))
