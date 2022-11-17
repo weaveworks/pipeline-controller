@@ -5,7 +5,7 @@ on:
       - published
 jobs:
   update-chart:
-    if: ${{ github.event.registry_package.name == 'pipeline-controller' }}
+    if: ${{ github.event.registry_package.name == 'pipeline-controller' && github.event.registry_package.package_version.container_metadata.tag.name != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: dump event
