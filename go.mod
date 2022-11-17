@@ -11,7 +11,7 @@ replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 
 replace golang.org/x/text v0.3.7 => golang.org/x/text v0.3.8
 
 require (
-	github.com/fluxcd/go-git-providers v0.9.0
+	github.com/fluxcd/go-git-providers v0.11.0
 	github.com/fluxcd/helm-controller/api v0.25.0
 	github.com/fluxcd/image-automation-controller v0.26.0
 	github.com/fluxcd/pkg/apis/meta v0.17.0
@@ -23,17 +23,15 @@ require (
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.2
-	github.com/google/go-github/v47 v47.0.0
+	github.com/golang/mock v1.6.0
 	github.com/onsi/gomega v1.22.1
 	github.com/spf13/pflag v1.0.5
 	github.com/weaveworks/cluster-controller v1.3.0
 	github.com/weaveworks/pipeline-controller/api v0.0.0
-	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 	k8s.io/api v0.25.2
 	k8s.io/apimachinery v0.25.2
 	k8s.io/client-go v0.25.2
 	k8s.io/kube-openapi v0.0.0-20220928191237-829ce0c27909
-	k8s.io/utils v0.0.0-20220922133306-665eaaec4324
 	sigs.k8s.io/controller-runtime v0.13.0
 	sigs.k8s.io/kustomize/kyaml v0.13.9
 )
@@ -83,6 +81,7 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/go-containerregistry v0.11.0 // indirect
+	github.com/google/go-github/v47 v47.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -119,6 +118,7 @@ require (
 	go.uber.org/zap v1.23.0 // indirect
 	golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be // indirect
 	golang.org/x/net v0.0.0-20220927171203-f486391704dc // indirect
+	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1 // indirect
 	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 // indirect
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
 	golang.org/x/text v0.3.8-0.20211004125949-5bd84dd9b33b // indirect
@@ -133,6 +133,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.25.2 // indirect
 	k8s.io/component-base v0.25.2 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect
+	k8s.io/utils v0.0.0-20220922133306-665eaaec4324 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect

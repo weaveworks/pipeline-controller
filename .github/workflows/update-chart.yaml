@@ -36,8 +36,36 @@ jobs:
           committer: GitHub <noreply@github.com>
           author: weaveworks-admin-bot <41998074+weaveworks-admin-bot@users.noreply.github.com>
           branch: update-chart
-          title: Update app version in chart
+          title: Update app version to ${{ github.event.registry_package.package_version.container_metadata.tag.name }} in chart
+          body: |
+            This PR bumps the minor chart version by default. If it is more appropriate to bump the major or the patch versions, please amend the commit accordingly.
+
+            The workflow that this PR was created from is "${{ github.workflow }}".
       - name: Check output
         run: |
           echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
           echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
+
+
+  update-wge-chart:
+    if: ${{ github.event.registry_package.name == 'charts/pipeline-controller' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          repository: weaveworks/weave-gitops-enterprise
+          token: ${{ secrets.GHCR_TOKEN }}
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.10.1
+      - name: Debug
+        run: echo '${{ toJSON(github.event) }}'
+      - name: Update pipeline-controller chart version
+        uses: mikefarah/yq@v4.30.4
+        with:
+          cmd: yq -i '.dependencies[2].version = "${{ github.event.registry_package.package_version.version }}"' charts/mccp/Chart.yaml
+      - name: Update chart dependencies
+        run: cd ./charts/mccp/Chart.yaml && helm dependency update
+      
