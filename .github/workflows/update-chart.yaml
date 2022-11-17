@@ -8,8 +8,6 @@ jobs:
     if: ${{ github.event.registry_package.name == 'pipeline-controller' && github.event.registry_package.package_version.container_metadata.tag.name != '' }}
     runs-on: ubuntu-latest
     steps:
-      - name: dump event
-        run: echo "${{ toJson(github.event) }}"
       - name: Checkout
         uses: actions/checkout@v3
       - name: bump app version
