@@ -30,6 +30,7 @@ jobs:
         id: cpr
         uses: peter-evans/create-pull-request@v4
         with:
+          token: ${{ secrets.GHCR_TOKEN }}
           commit-message: |
             Update app version in chart
           committer: GitHub <noreply@github.com>
