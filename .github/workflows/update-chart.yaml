@@ -65,7 +65,7 @@ jobs:
       - name: Update pipeline-controller chart version
         uses: mikefarah/yq@v4.30.4
         with:
-          cmd: yq -i '.dependencies[2].version = "0.1.0"' charts/mccp/Chart.yaml
+          cmd: yq -i '.dependencies[2].version = "${{ github.event.registry_package.package_version.version }}"' charts/mccp/Chart.yaml
       - name: Update chart dependencies
         run: cd ./charts/mccp/Chart.yaml && helm dependency update
       
