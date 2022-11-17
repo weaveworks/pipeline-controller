@@ -45,3 +45,27 @@ jobs:
         run: |
           echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
           echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
+
+
+  update-wge-chart:
+    if: ${{ github.event.registry_package.name == 'charts/pipeline-controller' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          repository: weaveworks/weave-gitops-enterprise
+          token: ${{ secrets.GHCR_TOKEN }}
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.10.1
+      - name: Debug
+        run: echo '${{ toJSON(github.event) }}'
+      - name: Update pipeline-controller chart version
+        uses: mikefarah/yq@v4.30.4
+        with:
+          cmd: yq -i '.dependencies[2].version = "0.1.0"' charts/mccp/Chart.yaml
+      - name: Update chart dependencies
+        run: cd ./charts/mccp/Chart.yaml && helm dependency update
+      
