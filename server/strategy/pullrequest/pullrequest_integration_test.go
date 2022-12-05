@@ -27,7 +27,7 @@ type Config struct {
 	username          string
 }
 
-func TestPromote_Integration(t *testing.T) {
+func TestPromote(t *testing.T) {
 
 	releaseManifest := `
 apiVersion: helm.toolkit.fluxcd.io/v2beta1
