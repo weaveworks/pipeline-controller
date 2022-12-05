@@ -75,9 +75,8 @@ type Promotion struct {
 type GitProviderType string
 
 const (
-	Unknown GitProviderType = ""
-	Github  GitProviderType = "github"
-	Gitlab  GitProviderType = "gitlab"
+	Github GitProviderType = "github"
+	Gitlab GitProviderType = "gitlab"
 )
 
 func (g GitProviderType) String() string {
