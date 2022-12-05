@@ -1,4 +1,4 @@
-package githubpr
+package pullrequest
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ import (
 
 const setterShortHand = "$promotion"
 
-func (g GitHubPR) patchManifests(inPath string, promotion strategy.Promotion) error {
+func (g PullRequest) patchManifests(inPath string, promotion strategy.Promotion) error {
 	fieldmeta.SetShortHandRef(setterShortHand)
 	pipeline := kio.Pipeline{
 		Inputs: []kio.Reader{&update.ScreeningLocalReader{

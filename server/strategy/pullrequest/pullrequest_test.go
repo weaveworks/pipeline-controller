@@ -1,9 +1,10 @@
-package githubpr_test
+package pullrequest_test
 
-//go:generate mockgen -destination mock_gitprovider_test.go -package githubpr_test github.com/fluxcd/go-git-providers/gitprovider Client,UserRepositoriesClient,UserRepository,PullRequestClient,PullRequest
+//go:generate mockgen -destination mock_gitprovider_test.go -package pullrequest_test github.com/fluxcd/go-git-providers/gitprovider Client,UserRepositoriesClient,UserRepository,PullRequestClient,PullRequest
 
 import (
 	"context"
+	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,6 @@ import (
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
-	"github.com/weaveworks/pipeline-controller/server/strategy/githubpr"
 )
 
 func initGitRepo(server *gittestserver.GitServer, fixture, branch, repositoryPath string) (*gogit.Repository, error) {
@@ -143,8 +143,8 @@ func initTestTLS() ([]byte, []byte, []byte) {
 	return tlsPublicKey, tlsPrivateKey, tlsCA
 }
 
-func mockGitHubClientFactory(c gitprovider.Client) githubpr.ClientFactory {
-	return func(_ ...gitprovider.ClientOption) (gitprovider.Client, error) {
+func mockGitProviderClientFactory(c gitprovider.Client) pullrequest.GitProviderClientFactory {
+	return func(_ pullrequest.GitProviderConfig) (gitprovider.Client, error) {
 		return c, nil
 	}
 }
@@ -172,7 +172,7 @@ func TestHandles(t *testing.T) {
 		},
 	}
 
-	strat, err := githubpr.NewGitHubPR(nil, logger.NewLogger(logger.Options{}))
+	strat, err := pullrequest.New(nil, logger.NewLogger(logger.Options{}))
 	if err != nil {
 		t.Fatalf("unable to create GitHub promotion strategy: %s", err)
 	}
@@ -214,14 +214,16 @@ func TestPromote(t *testing.T) {
 			strategy.Promotion{},
 			nil,
 			nil,
-			githubpr.ErrSpecIsNil,
+			pullrequest.ErrSpecIsNil,
 			"",
 			nil,
 		},
 		{
 			"Secret not specified",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{},
+				PullRequest: &v1alpha1.PullRequestPromotion{
+					Type: "github",
+				},
 			},
 			strategy.Promotion{},
 			nil,
@@ -234,6 +236,7 @@ func TestPromote(t *testing.T) {
 			"no repo URL specified",
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
+					Type: "github",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -259,7 +262,8 @@ func TestPromote(t *testing.T) {
 			"repo URL is invalid",
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "https://example.org",
+					Type: "github",
+					URL:  "https://example.org",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -285,7 +289,8 @@ func TestPromote(t *testing.T) {
 			"no GitHub token",
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
+					Type: "github",
+					URL:  "to-be-filled-in-by-test-code",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -307,14 +312,15 @@ func TestPromote(t *testing.T) {
 				repoFixtureDir: "testdata/git/repository",
 			},
 			nil,
-			"failed to create PR: GitHub token is empty",
+			"failed to create PR: git provider token is empty",
 			nil,
 		},
 		{
 			"missing/invalid credentials",
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
+					Type: "github",
+					URL:  "to-be-filled-in-by-test-code",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -345,7 +351,8 @@ func TestPromote(t *testing.T) {
 			"HTTP scheme not supported",
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
+					Type: "github",
+					URL:  "to-be-filled-in-by-test-code",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -374,14 +381,87 @@ func TestPromote(t *testing.T) {
 				password:       "pass",
 			},
 			nil,
-			"failed to create PR: failed parsing GitHub URL: unsupported URL scheme, only HTTPS supported",
+			"failed to create PR: failed parsing git provider URL: unsupported URL scheme, only HTTPS supported",
+			nil,
+		},
+		{
+			"no git provider",
+			v1alpha1.Promotion{
+				PullRequest: &v1alpha1.PullRequestPromotion{
+					URL: "to-be-filled-in-by-test-code",
+					SecretRef: meta.LocalObjectReference{
+						Name: "repo-credentials",
+					},
+				},
+			},
+			strategy.Promotion{
+				PipelineNamespace: "foo",
+				PipelineName:      "bar",
+			},
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{
+						Namespace: "foo",
+						Name:      "repo-credentials",
+					},
+				},
+			},
+			&gitServerConfig{
+				repoFixtureDir: "testdata/git/repository",
+				username:       "user",
+				password:       "pass",
+			},
+			nil,
+			"git provider type is empty",
+			nil,
+		},
+		{
+			"invalid git provider",
+			v1alpha1.Promotion{
+				PullRequest: &v1alpha1.PullRequestPromotion{
+					Type: "subversion",
+					URL:  "to-be-filled-in-by-test-code",
+					SecretRef: meta.LocalObjectReference{
+						Name: "repo-credentials",
+					},
+				},
+			},
+			strategy.Promotion{
+				PipelineNamespace: "foo",
+				PipelineName:      "bar",
+			},
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{
+						Namespace: "foo",
+						Name:      "repo-credentials",
+					},
+					Data: map[string][]byte{
+						"token":    []byte("token"),
+						"username": []byte("user"),
+						"password": []byte("pass"),
+						"caFile":   tlsCA,
+					},
+				},
+			},
+			&gitServerConfig{
+				repoFixtureDir: "testdata/git/repository",
+				username:       "user",
+				password:       "pass",
+				publicKey:      tlsPublicKey,
+				privateKey:     tlsPrivateKey,
+				ca:             tlsCA,
+			},
+			nil,
+			"invalid git provider type",
 			nil,
 		},
 		{
 			"happy path with auth",
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
+					Type: "github",
+					URL:  "to-be-filled-in-by-test-code",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -471,10 +551,10 @@ func TestPromote(t *testing.T) {
 				gitClient, err = tt.gitMockSetup(mockCtrl, tt.promSpec)
 				g.Expect(err).NotTo(HaveOccurred(), "failed setting up mocks")
 			}
-			mockCF := mockGitHubClientFactory(gitClient)
-			strat, err := githubpr.NewGitHubPR(fc, logger.NewLogger(logger.Options{}), githubpr.GitHubClientFactory(mockCF))
+			mockCF := mockGitProviderClientFactory(gitClient)
+			strat, err := pullrequest.New(fc, logger.NewLogger(logger.Options{}), pullrequest.GitClientFactory(mockCF))
 			if err != nil {
-				t.Fatalf("unable to create GitHub promotion strategy: %s", err)
+				t.Fatalf("unable to create pullrequest promotion strategy: %s", err)
 			}
 
 			res, err := strat.Promote(context.Background(), tt.promSpec, tt.promotion)
