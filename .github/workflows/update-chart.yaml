@@ -15,8 +15,8 @@ jobs:
           gpg --list-secret-keys --keyid-format=long
           echo -n "$GPG_SIGNING_KEY" | gpg --import
           gpg --list-secret-keys --keyid-format=long
-          key_id = $(echo -n "$GPG_SIGNING_KEY" | gpg --dry-run --import --verbose 2>&1 | awk '/^gpg: sec/ { print $3 }' | cut -d '/' -f 2)
-          git config user.signingkey "${key_id}"
+          key_id=$(echo -n "$GPG_SIGNING_KEY" | gpg --dry-run --import --verbose 2>&1 | awk '/^gpg: sec/ { print $3 }' | cut -d '/' -f 2)
+          git config user.signingkey $key_id
           git config commit.gpgsign true
         env:
           GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
