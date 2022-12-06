@@ -11,12 +11,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Import GPG key for signing commits
-        uses: crazy-max/ghaction-import-gpg@v5
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
+        run: |
+          gpg --list-secret-keys --keyid-format=long
+          echo -n "$GPG_SIGNING_KEY" | gpg --import
+          gpg --list-secret-keys --keyid-format=long
+          git config user.signingkey 4152F5C0824BCDE3
+          git config commit.gpgsign true
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
       - name: bump app version
         uses: mikefarah/yq@v4.30.4
         with:
