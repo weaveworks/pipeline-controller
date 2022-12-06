@@ -174,7 +174,7 @@ func lookupNextEnvironment(pipeline pipelinev1alpha1.Pipeline, env string, appRe
 
 func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelinev1alpha1.Pipeline, header http.Header, body []byte) error {
 	// If not secret defined just ignore the X-Signature checking
-	if p.Spec.AppRef.SecretRef == nil {
+	if p.Spec.Promotion == nil || p.Spec.Promotion.SecretRef == nil {
 		return nil
 	}
 
@@ -184,7 +184,7 @@ func (h DefaultPromotionHandler) verifyXSignature(ctx context.Context, p pipelin
 
 	s := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      p.Spec.AppRef.SecretRef.Name,
+			Name:      p.Spec.Promotion.SecretRef.Name,
 			Namespace: p.Namespace,
 		},
 	}
