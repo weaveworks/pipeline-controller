@@ -63,16 +63,6 @@ spec:
                   name:
                     description: Name of the referent.
                     type: string
-                  secretRef:
-                    description: SecrefRef reference the secret that contains a 'hmac-key'
-                      field with HMAC key used to authenticate webhook calls.
-                    properties:
-                      name:
-                        description: Name of the referent.
-                        type: string
-                    required:
-                    - name
-                    type: object
                 required:
                 - apiVersion
                 - kind
@@ -173,6 +163,16 @@ spec:
                     required:
                     - secretRef
                     - url
+                    type: object
+                  secretRef:
+                    description: SecrefRef reference the secret that contains a 'hmac-key'
+                      field with HMAC key used to authenticate webhook calls.
+                    properties:
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - name
                     type: object
                 type: object
             required:

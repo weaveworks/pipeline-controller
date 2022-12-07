@@ -200,7 +200,7 @@ func TestVerifyXSignature(t *testing.T) {
 	pipeline := createTestPipelineWithPromotion(g, t)
 	secret := createHmacSecret(g, t, pipeline)
 
-	pipeline.Spec.AppRef.SecretRef = &meta.LocalObjectReference{
+	pipeline.Spec.Promotion.SecretRef = &meta.LocalObjectReference{
 		Name: secret.Name,
 	}
 	g.Expect(k8sClient.Update(context.Background(), &pipeline)).To(Succeed())
