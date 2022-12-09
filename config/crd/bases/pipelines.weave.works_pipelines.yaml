@@ -147,8 +147,8 @@ spec:
                           credentials for the git repository and for the GitHub API.
                           For HTTPS repositories the Secret must contain 'username'
                           and 'password' fields. For SSH repositories the Secret must
-                          contain 'identity' and 'known_hosts' fields. For the GitHub
-                          API the Secret must contain a 'token' field.
+                          contain 'identity' and 'known_hosts' fields. For Git Provider
+                          API to manage pull requests, it must contain a 'token' field.
                         properties:
                           name:
                             description: Name of the referent.
@@ -156,12 +156,20 @@ spec:
                         required:
                         - name
                         type: object
+                      type:
+                        description: Indicates the git provider type to manage pull
+                          requests.
+                        enum:
+                        - github
+                        - gitlab
+                        type: string
                       url:
                         description: The git repository URL used to patch the manifests
                           for promotion.
                         type: string
                     required:
                     - secretRef
+                    - type
                     - url
                     type: object
                   secretRef:

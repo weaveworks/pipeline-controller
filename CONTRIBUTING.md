@@ -17,13 +17,44 @@ by Go to download dependencies from private repositories (replace `USERNAME` wit
 
 ## Running Tests
 
-This project only has unit tests for now. Those are run with
+### Unit Testing
+
+This project has unit tests
 
 ```sh
 make test
 ```
 
 Testing on this controller follows closely what is done by default in `kubebuilder` although we ditched the use of `Gomega` in favor of native Go testing structure. As an example on how to write tests for this controller you can take a look at Kubebuilder [docs](https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html#writing-controller-tests) for reference.
+
+### Integration Testing
+
+This project has integration tests that you could run via its target.
+
+```sh
+make integration-test
+```
+
+#### Environment Configuration 
+
+For git provider integration tests you would need these in your environment.
+
+| Variable        | Description                                                       |
+|-----------------|-------------------------------------------------------------------|
+| GITHUB_USER     | github username to use in api calls                               |
+| GITHUB_TOKEN    | github PAT token to use in api calls                              |
+| GITLAB_USER     | gitlab username to use in api calls                               |
+| GITLAB_TOKEN    | gitlab PAT token to use in api calls                              |
+
+#### Adding integration tests
+
+An example you could see on [pullrequest_integration_test.go](./server/strategy/pullrequest/pullrequest_integration_test.go)
+where you would need to add the build tag `integration`
+
+```go
+//go:build integration
+
+```
 
 ## Working with promotions
 
