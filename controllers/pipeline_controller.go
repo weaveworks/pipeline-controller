@@ -43,7 +43,6 @@ func NewPipelineReconciler(
 		Scheme:         s,
 		targetScheme:   targetScheme,
 		ControllerName: controllerName,
-		recorder:       nil,
 	}
 }
 
