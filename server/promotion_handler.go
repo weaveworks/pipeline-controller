@@ -73,7 +73,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 
 	var pipeline pipelinev1alpha1.Pipeline
 	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.PipelineNamespace, Name: promotion.PipelineName}, &pipeline); err != nil {
-		h.log.V(logger.DebugLevel).Info("could not fetch Pipeline object", "error", err)
+		h.log.V(logger.InfoLevel).Info("could not fetch Pipeline object", "error", err)
 		if k8serrors.IsNotFound(err) {
 			rw.WriteHeader(http.StatusNotFound)
 			return
@@ -85,6 +85,14 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	if err := h.verifyXSignature(r.Context(), pipeline, r.Header, body); err != nil {
 		h.log.V(logger.DebugLevel).Error(err, "failed verifying X-Signature header")
 		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Reseting waiting approval
+	if err := h.setWaitingApproval(r.Context(), pipeline, ""); err != nil {
+		h.log.Error(err, "error resetting waiting approval")
+		rw.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(rw, "error promoting application, please consult the promotion server's logs")
 		return
 	}
 
@@ -109,9 +117,30 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	}
 	promotion.Environment = *promEnv
 
+	promSpec := pipeline.Spec.GetPromotion(promEnv.Name)
+
+	if promSpec == nil {
+		h.log.Error(err, "no promotion configured in Pipeline resource")
+		rw.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(rw, "error promoting application, please consult the promotion server's logs")
+		return
+	}
+
+	if promSpec.Manual {
+		if err := h.setWaitingApproval(r.Context(), pipeline, promEnv.Name); err != nil {
+			h.log.Error(err, "error setting waiting approval", "env", promEnv.Name)
+			rw.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(rw, "error promoting application, please consult the promotion server's logs")
+			return
+		}
+
+		rw.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	h.log.Info("promoting app", "app", pipeline.Spec.AppRef, "source environment", env, "target environment", promotion.Environment.Name)
 
-	res, err := h.promote(r.Context(), pipeline, promotion)
+	res, err := h.promote(r.Context(), promSpec, promotion)
 	if err != nil {
 		h.log.Error(err, "error promoting application")
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -127,8 +156,17 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (h DefaultPromotionHandler) promote(ctx context.Context, p pipelinev1alpha1.Pipeline, prom strategy.Promotion) (*strategy.PromotionResult, error) {
-	promotionSpec := p.Spec.Promotion
+func (h DefaultPromotionHandler) setWaitingApproval(ctx context.Context, pipeline pipelinev1alpha1.Pipeline, env string) error {
+	h.log.Info("setting waiting approval to", "pipeline", pipeline.Name, "env", env)
+	if err := h.c.Get(ctx, client.ObjectKeyFromObject(&pipeline), &pipeline); err != nil {
+		return err
+	}
+
+	pipeline.Status.WaitingApproval = env
+	return h.c.Status().Update(ctx, &pipeline)
+}
+
+func (h DefaultPromotionHandler) promote(ctx context.Context, promotionSpec *pipelinev1alpha1.Promotion, prom strategy.Promotion) (*strategy.PromotionResult, error) {
 	if promotionSpec == nil {
 		return nil, fmt.Errorf("no promotion configured in Pipeline resource")
 	}

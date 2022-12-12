@@ -162,12 +162,20 @@ func TestHandles(t *testing.T) {
 		},
 		{
 			"nil PullRequestPromotion",
-			v1alpha1.Promotion{PullRequest: nil},
+			v1alpha1.Promotion{
+				Strategy: v1alpha1.Strategy{
+					PullRequest: nil,
+				},
+			},
 			false,
 		},
 		{
 			"empty PullRequestPromotion",
-			v1alpha1.Promotion{PullRequest: &v1alpha1.PullRequestPromotion{}},
+			v1alpha1.Promotion{
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{},
+				},
+			},
 			true,
 		},
 	}
@@ -209,7 +217,9 @@ func TestPromote(t *testing.T) {
 		{
 			"nil PullRequest spec",
 			v1alpha1.Promotion{
-				PullRequest: nil,
+				Strategy: v1alpha1.Strategy{
+					PullRequest: nil,
+				},
 			},
 			strategy.Promotion{},
 			nil,
@@ -221,7 +231,9 @@ func TestPromote(t *testing.T) {
 		{
 			"Secret not specified",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{},
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{},
+				},
 			},
 			strategy.Promotion{},
 			nil,
@@ -233,9 +245,11 @@ func TestPromote(t *testing.T) {
 		{
 			"no repo URL specified",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{
-					SecretRef: meta.LocalObjectReference{
-						Name: "repo-credentials",
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
 					},
 				},
 			},
@@ -258,10 +272,12 @@ func TestPromote(t *testing.T) {
 		{
 			"repo URL is invalid",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "https://example.org",
-					SecretRef: meta.LocalObjectReference{
-						Name: "repo-credentials",
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						URL: "https://example.org",
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
 					},
 				},
 			},
@@ -284,10 +300,12 @@ func TestPromote(t *testing.T) {
 		{
 			"no GitHub token",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
-					SecretRef: meta.LocalObjectReference{
-						Name: "repo-credentials",
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						URL: "to-be-filled-in-by-test-code",
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
 					},
 				},
 			},
@@ -313,10 +331,12 @@ func TestPromote(t *testing.T) {
 		{
 			"missing/invalid credentials",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
-					SecretRef: meta.LocalObjectReference{
-						Name: "repo-credentials",
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						URL: "to-be-filled-in-by-test-code",
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
 					},
 				},
 			},
@@ -344,10 +364,12 @@ func TestPromote(t *testing.T) {
 		{
 			"HTTP scheme not supported",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
-					SecretRef: meta.LocalObjectReference{
-						Name: "repo-credentials",
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						URL: "to-be-filled-in-by-test-code",
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
 					},
 				},
 			},
@@ -380,10 +402,12 @@ func TestPromote(t *testing.T) {
 		{
 			"happy path with auth",
 			v1alpha1.Promotion{
-				PullRequest: &v1alpha1.PullRequestPromotion{
-					URL: "to-be-filled-in-by-test-code",
-					SecretRef: meta.LocalObjectReference{
-						Name: "repo-credentials",
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						URL: "to-be-filled-in-by-test-code",
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
 					},
 				},
 			},
@@ -416,7 +440,7 @@ func TestPromote(t *testing.T) {
 			nil,
 			"",
 			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion) (gitprovider.Client, error) {
-				repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.PullRequest.URL)
+				repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.Strategy.PullRequest.URL)
 				if err != nil {
 					return nil, err
 				}
@@ -461,7 +485,7 @@ func TestPromote(t *testing.T) {
 				t.Cleanup(func() {
 					server.StopHTTP()
 				})
-				tt.promSpec.PullRequest.URL = server.HTTPAddress() + repoPath
+				tt.promSpec.Strategy.PullRequest.URL = server.HTTPAddress() + repoPath
 			}
 
 			var gitClient gitprovider.Client

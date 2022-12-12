@@ -29,12 +29,16 @@ func TestHandles(t *testing.T) {
 		},
 		{
 			"nil NotificationPromotion",
-			v1alpha1.Promotion{Notification: nil},
+			v1alpha1.Promotion{Strategy: v1alpha1.Strategy{Notification: nil}},
 			false,
 		},
 		{
 			"empty NotificationPromotion",
-			v1alpha1.Promotion{Notification: &v1alpha1.NotificationPromotion{}},
+			v1alpha1.Promotion{
+				Strategy: v1alpha1.Strategy{
+					Notification: &v1alpha1.NotificationPromotion{},
+				},
+			},
 			true,
 		},
 	}
@@ -74,7 +78,9 @@ func TestPromote(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 
 	promSpec := v1alpha1.Promotion{
-		Notification: &v1alpha1.NotificationPromotion{},
+		Strategy: v1alpha1.Strategy{
+			Notification: &v1alpha1.NotificationPromotion{},
+		},
 	}
 
 	promotion := strategy.Promotion{

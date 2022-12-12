@@ -87,6 +87,62 @@ spec:
                       description: Name defines the name of this environment. This
                         is commonly something such as "dev" or "prod".
                       type: string
+                    promotion:
+                      description: Promotion defines details about how the promotion
+                        is done on this environment.
+                      properties:
+                        manual:
+                          description: Manual option to allow promotion between to
+                            require manual approval before proceeding.
+                          type: boolean
+                        strategy:
+                          description: Strategy defines which strategy the promotion
+                            should use.
+                          properties:
+                            notification:
+                              description: Notification defines a promotion where
+                                an event is emitted through Flux's notification-controller
+                                each time an app is to be promoted.
+                              type: object
+                            pull-request:
+                              description: PullRequest defines a promotion through
+                                a GitHub Pull Request.
+                              properties:
+                                branch:
+                                  description: 'The branch to checkout after cloning.
+                                    Note: This is just the base branch and does not
+                                    denote the branch used to create a PR from. The
+                                    latter is generated automatically and cannot be
+                                    provided. If not specified the default "main"
+                                    is used.'
+                                  type: string
+                                secretRef:
+                                  description: SecretRef specifies the Secret containing
+                                    authentication credentials for the git repository
+                                    and for the GitHub API. For HTTPS repositories
+                                    the Secret must contain 'username' and 'password'
+                                    fields. For SSH repositories the Secret must contain
+                                    'identity' and 'known_hosts' fields. For the GitHub
+                                    API the Secret must contain a 'token' field.
+                                  properties:
+                                    name:
+                                      description: Name of the referent.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                url:
+                                  description: The git repository URL used to patch
+                                    the manifests for promotion.
+                                  type: string
+                              required:
+                              - secretRef
+                              - url
+                              type: object
+                          type: object
+                      required:
+                      - strategy
+                      type: object
                     targets:
                       description: Targets is a list of targets that are part of this
                         environment. Each environment should have at least one target.
@@ -136,44 +192,56 @@ spec:
                 description: Promotion defines details about how promotions are carried
                   out between the environments of this pipeline.
                 properties:
-                  notification:
-                    description: Notification defines a promotion where an event is
-                      emitted through Flux's notification-controller each time an
-                      app is to be promoted.
-                    type: object
-                  pull-request:
-                    description: PullRequest defines a promotion through a GitHub
-                      Pull Request.
+                  manual:
+                    description: Manual option to allow promotion between to require
+                      manual approval before proceeding.
+                    type: boolean
+                  strategy:
+                    description: Strategy defines which strategy the promotion should
+                      use.
                     properties:
-                      branch:
-                        description: 'The branch to checkout after cloning. Note:
-                          This is just the base branch and does not denote the branch
-                          used to create a PR from. The latter is generated automatically
-                          and cannot be provided. If not specified the default "main"
-                          is used.'
-                        type: string
-                      secretRef:
-                        description: SecretRef specifies the Secret containing authentication
-                          credentials for the git repository and for the GitHub API.
-                          For HTTPS repositories the Secret must contain 'username'
-                          and 'password' fields. For SSH repositories the Secret must
-                          contain 'identity' and 'known_hosts' fields. For the GitHub
-                          API the Secret must contain a 'token' field.
+                      notification:
+                        description: Notification defines a promotion where an event
+                          is emitted through Flux's notification-controller each time
+                          an app is to be promoted.
+                        type: object
+                      pull-request:
+                        description: PullRequest defines a promotion through a GitHub
+                          Pull Request.
                         properties:
-                          name:
-                            description: Name of the referent.
+                          branch:
+                            description: 'The branch to checkout after cloning. Note:
+                              This is just the base branch and does not denote the
+                              branch used to create a PR from. The latter is generated
+                              automatically and cannot be provided. If not specified
+                              the default "main" is used.'
+                            type: string
+                          secretRef:
+                            description: SecretRef specifies the Secret containing
+                              authentication credentials for the git repository and
+                              for the GitHub API. For HTTPS repositories the Secret
+                              must contain 'username' and 'password' fields. For SSH
+                              repositories the Secret must contain 'identity' and
+                              'known_hosts' fields. For the GitHub API the Secret
+                              must contain a 'token' field.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          url:
+                            description: The git repository URL used to patch the
+                              manifests for promotion.
                             type: string
                         required:
-                        - name
+                        - secretRef
+                        - url
                         type: object
-                      url:
-                        description: The git repository URL used to patch the manifests
-                          for promotion.
-                        type: string
-                    required:
-                    - secretRef
-                    - url
                     type: object
+                required:
+                - strategy
                 type: object
             required:
             - appRef
@@ -256,6 +324,10 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
+              waitingApproval:
+                description: WaitingApproval holds the gate name that's currently
+                  waiting approval
+                type: string
             type: object
         type: object
     served: true

@@ -53,13 +53,13 @@ func setDefaults(g *GitHubPR) {
 }
 
 func (g GitHubPR) Handles(p pipelinev1alpha1.Promotion) bool {
-	return p.PullRequest != nil
+	return p.Strategy.PullRequest != nil
 }
 
 func (g GitHubPR) Promote(ctx context.Context, promSpec pipelinev1alpha1.Promotion, promotion strategy.Promotion) (*strategy.PromotionResult, error) {
 	log := g.log.WithValues("promotion", promotion)
 
-	prSpec := promSpec.PullRequest
+	prSpec := promSpec.Strategy.PullRequest
 	if prSpec == nil {
 		return nil, ErrSpecIsNil
 	}

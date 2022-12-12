@@ -122,8 +122,10 @@ func createTestPipeline(g *WithT, t *testing.T) v1alpha1.Pipeline {
 func createTestPipelineWithPromotion(g *WithT, t *testing.T) v1alpha1.Pipeline {
 	p := buildTestPipeline()
 	p.Spec.Promotion = &v1alpha1.Promotion{
-		PullRequest: &v1alpha1.PullRequestPromotion{
-			URL: "foobar",
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				URL: "foobar",
+			},
 		},
 	}
 	return createPipeline(g, t, p)
