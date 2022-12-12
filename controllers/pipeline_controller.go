@@ -134,7 +134,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
 		r.emitEventf(
 			&pipeline,
-			corev1.EventTypeNormal,
+			corev1.EventTypeWarning,
 			"SetStatus", "Failed to patch status for pipeline %s/%s: %s",
 			pipeline.GetNamespace(), pipeline.GetName(),
 			err,
