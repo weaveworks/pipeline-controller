@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 	"os"
+
+	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -110,7 +111,10 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	pullRequestStrategy, err := pullrequest.New(mgr.GetClient(), log.WithValues("strategy", "pullrequest"))
+	pullRequestStrategy, err := pullrequest.New(
+		mgr.GetClient(),
+		log.WithValues("strategy", "pullrequest"),
+	)
 	if err != nil {
 		setupLog.Error(err, "unable to create GitHub promotion strategy")
 		os.Exit(1)

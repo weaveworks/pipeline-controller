@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -26,15 +28,22 @@ type PipelineReconciler struct {
 	Scheme         *runtime.Scheme
 	targetScheme   *runtime.Scheme
 	ControllerName string
+	recorder       record.EventRecorder
 }
 
-func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string) *PipelineReconciler {
+func NewPipelineReconciler(
+	c client.Client,
+	s *runtime.Scheme,
+	controllerName string,
+) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
+
 	return &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
 		targetScheme:   targetScheme,
 		ControllerName: controllerName,
+		recorder:       nil,
 	}
 }
 
@@ -71,15 +80,41 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 							v1alpha1.TargetClusterNotFoundReason); err != nil {
 							return ctrl.Result{}, err
 						}
+						r.emitEventf(
+							&pipeline,
+							corev1.EventTypeWarning,
+							"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s; requeue",
+							pipeline.GetNamespace(), pipeline.GetName(),
+							err,
+						)
 						// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
 						return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
 					}
+					r.emitEventf(
+						&pipeline,
+						corev1.EventTypeWarning,
+						"GetClusterError", "Failed to get cluster %s/%s for pipeline %s/%s: %s",
+						target.ClusterRef.Namespace, target.ClusterRef.Name,
+						pipeline.GetNamespace(), pipeline.GetName(),
+						err,
+					)
 					return ctrl.Result{}, err
 				}
 
 				if !conditions.IsReady(cluster.Status.Conditions) {
-					if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
-						v1alpha1.TargetClusterNotReadyReason); err != nil {
+					err := r.setStatusCondition(
+						ctx, pipeline,
+						fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
+						v1alpha1.TargetClusterNotReadyReason,
+					)
+					if err != nil {
+						r.emitEventf(
+							&pipeline,
+							corev1.EventTypeWarning,
+							"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s",
+							pipeline.GetNamespace(), pipeline.GetName(),
+							err,
+						)
 						return ctrl.Result{}, err
 					}
 					// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
@@ -98,8 +133,21 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	pipeline.Status.ObservedGeneration = pipeline.Generation
 	apimeta.SetStatusCondition(&pipeline.Status.Conditions, newCondition)
 	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
+		r.emitEventf(
+			&pipeline,
+			corev1.EventTypeNormal,
+			"SetStatus", "Failed to patch status for pipeline %s/%s: %s",
+			pipeline.GetNamespace(), pipeline.GetName(),
+			err,
+		)
 		return ctrl.Result{Requeue: true}, err
 	}
+	r.emitEventf(
+		&pipeline,
+		corev1.EventTypeNormal,
+		"Updated", "Updated pipeline %s/%s",
+		pipeline.GetNamespace(), pipeline.GetName(),
+	)
 
 	return ctrl.Result{}, nil
 }
@@ -153,6 +201,10 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
+	if r.recorder == nil {
+		r.recorder = mgr.GetEventRecorderFor(r.ControllerName)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Pipeline{}).
 		Watches(
@@ -160,6 +212,14 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.requestsForRevisionChangeOf(gitopsClusterIndexKey)),
 		).
 		Complete(r)
+}
+
+func (r *PipelineReconciler) emitEventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
+	if r.recorder == nil {
+		return
+	}
+
+	r.recorder.Eventf(object, eventtype, reason, messageFmt, args...)
 }
 
 func trimString(str string, limit int) string {
