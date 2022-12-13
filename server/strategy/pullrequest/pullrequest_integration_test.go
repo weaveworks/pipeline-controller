@@ -150,7 +150,7 @@ spec:
 				t.Fatalf("unable to create pullrequest promotion strategy: %s", err)
 			}
 
-			gitClient, _ := newGitProviderClientFactory()(tt.config.gitProviderConfig)
+			gitClient, _ := NewGitProviderClientFactory()(tt.config.gitProviderConfig)
 
 			require.Nil(t, err)
 
