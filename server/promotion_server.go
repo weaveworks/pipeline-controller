@@ -19,13 +19,15 @@ import (
 )
 
 type PromotionServer struct {
-	log              logr.Logger
-	c                client.Client
-	addr             string
-	listener         net.Listener
-	promHandler      http.Handler
-	promEndpointName string
-	stratReg         strategy.StrategyRegistry
+	log                  logr.Logger
+	c                    client.Client
+	addr                 string
+	listener             net.Listener
+	promHandler          http.Handler
+	promEndpointName     string
+	approvalHandler      http.Handler
+	approvalEndpointName string
+	stratReg             strategy.StrategyRegistry
 }
 
 type Opt func(s *PromotionServer) error
@@ -34,6 +36,7 @@ var (
 	ErrClientCantBeNil       = fmt.Errorf("client can't be nil")
 	DefaultListenAddr        = "127.0.0.1:8080"
 	DefaultPromotionEndpoint = "/promotion"
+	DefaultApprovalEndpoint  = "/approval"
 )
 
 func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) {
@@ -80,13 +83,26 @@ func setDefaults(s *PromotionServer) {
 	if s.promEndpointName == "" {
 		s.promEndpointName = DefaultPromotionEndpoint
 	}
+
+	if s.approvalHandler == nil {
+		s.approvalHandler = NewDefaultApprovalHandler(
+			s.log.WithName("handler"),
+			s.stratReg,
+			s.c,
+		)
+	}
+	if s.approvalEndpointName == "" {
+		s.approvalEndpointName = DefaultApprovalEndpoint
+	}
 }
 
 func (s PromotionServer) Start(ctx context.Context) error {
-	pathPrefix := "/promotion/"
+	promPathPrefix := "/promotion/"
+	approvalPathPrefix := "/approval/"
 
 	mux := http.NewServeMux()
-	mux.Handle(pathPrefix, http.StripPrefix(s.promEndpointName, s.promHandler))
+	mux.Handle(promPathPrefix, http.StripPrefix(s.promEndpointName, s.promHandler))
+	mux.Handle(approvalPathPrefix, http.StripPrefix(s.approvalEndpointName, s.approvalHandler))
 	mux.Handle("/healthz", healthz.CheckHandler{Checker: healthz.Ping})
 
 	srv := http.Server{
@@ -95,7 +111,7 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		log := s.log.WithValues("kind", "promotion webhook", "path", pathPrefix, "addr", s.listener.Addr())
+		log := s.log.WithValues("kind", "promotion webhook", "path", promPathPrefix, "addr", s.listener.Addr())
 		log.Info("Starting server")
 		if err := srv.Serve(s.listener); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {

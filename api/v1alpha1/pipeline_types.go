@@ -120,9 +120,57 @@ type PipelineStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// WaitingApproval holds the gate name that's currently waiting approval
+	// Environments holds environment statuses.
 	// +optional
-	WaitingApproval string `json:"waitingApproval,omitempty"`
+	Environments map[string]*EnvironmentStatus `json:"environments"`
+}
+
+func (p *PipelineStatus) GetWaitingApproval(env string) WaitingApproval {
+	val, ok := p.Environments[env]
+	if !ok {
+		return WaitingApproval{}
+	}
+
+	return val.WaitingApproval
+}
+
+func (p *PipelineStatus) SetWaitingApproval(env, revision string) {
+	waitingApproval := WaitingApproval{
+		Revision: revision,
+	}
+
+	p.setWaitingApproval(env, waitingApproval)
+}
+
+func (p *PipelineStatus) ResetWaitingApproval(env string) {
+	p.setWaitingApproval(env, WaitingApproval{})
+}
+
+func (p *PipelineStatus) setWaitingApproval(env string, waitingApproval WaitingApproval) {
+	if p.Environments == nil {
+		p.Environments = make(map[string]*EnvironmentStatus)
+	}
+
+	val, ok := p.Environments[env]
+	if !ok {
+		p.Environments[env] = &EnvironmentStatus{
+			WaitingApproval: waitingApproval,
+		}
+
+		return
+	}
+
+	val.WaitingApproval = waitingApproval
+}
+
+type EnvironmentStatus struct {
+	WaitingApproval WaitingApproval `json:"waitingApproval,omitempty"`
+}
+
+// WaitingApproval holds the environment name and revision that's currently waiting approval.
+type WaitingApproval struct {
+	// Revision waiting approval.
+	Revision string `json:"revision"`
 }
 
 type Environment struct {

@@ -320,14 +320,26 @@ spec:
                   - type
                   type: object
                 type: array
+              environments:
+                additionalProperties:
+                  properties:
+                    waitingApproval:
+                      description: WaitingApproval holds the environment name and
+                        revision that's currently waiting approval.
+                      properties:
+                        revision:
+                          description: Revision waiting approval.
+                          type: string
+                      required:
+                      - revision
+                      type: object
+                  type: object
+                description: Environments holds environment statuses.
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
-              waitingApproval:
-                description: WaitingApproval holds the gate name that's currently
-                  waiting approval
-                type: string
             type: object
         type: object
     served: true

@@ -88,14 +88,6 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Reseting waiting approval
-	if err := h.setWaitingApproval(r.Context(), pipeline, ""); err != nil {
-		h.log.Error(err, "error resetting waiting approval")
-		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(rw, "error promoting application, please consult the promotion server's logs")
-		return
-	}
-
 	var ev events.Event
 	if err := json.Unmarshal(body, &ev); err != nil {
 		h.log.V(logger.DebugLevel).Info("failed decoding request body")
@@ -127,7 +119,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	}
 
 	if promSpec.Manual {
-		if err := h.setWaitingApproval(r.Context(), pipeline, promEnv.Name); err != nil {
+		if err := h.setWaitingApproval(r.Context(), pipeline, promEnv.Name, promotion.Version); err != nil {
 			h.log.Error(err, "error setting waiting approval", "env", promEnv.Name)
 			rw.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(rw, "error promoting application, please consult the promotion server's logs")
@@ -156,13 +148,14 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (h DefaultPromotionHandler) setWaitingApproval(ctx context.Context, pipeline pipelinev1alpha1.Pipeline, env string) error {
-	h.log.Info("setting waiting approval to", "pipeline", pipeline.Name, "env", env)
+func (h DefaultPromotionHandler) setWaitingApproval(ctx context.Context, pipeline pipelinev1alpha1.Pipeline, env string, revision string) error {
+	h.log.Info("set waiting approval to", "pipeline", pipeline.Name, "env", env)
 	if err := h.c.Get(ctx, client.ObjectKeyFromObject(&pipeline), &pipeline); err != nil {
 		return err
 	}
 
-	pipeline.Status.WaitingApproval = env
+	pipeline.Status.SetWaitingApproval(env, revision)
+
 	return h.c.Status().Update(ctx, &pipeline)
 }
 
