@@ -86,9 +86,27 @@ type Strategy struct {
 	// Notification defines a promotion where an event is emitted through Flux's notification-controller each time an app is to be promoted.
 	// +optional
 	Notification *NotificationPromotion `json:"notification,omitempty"`
+	// SecrefRef reference the secret that contains a 'hmac-key' field with HMAC key used to authenticate webhook calls.
+	// +optional
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
+}
+
+type GitProviderType string
+
+const (
+	Github GitProviderType = "github"
+	Gitlab GitProviderType = "gitlab"
+)
+
+func (g GitProviderType) String() string {
+	return string(g)
 }
 
 type PullRequestPromotion struct {
+	// Indicates the git provider type to manage pull requests.
+	// +required
+	// +kubebuilder:validation:Enum=github;gitlab
+	Type GitProviderType `json:"type"`
 	// The git repository URL used to patch the manifests for promotion.
 	// +required
 	URL string `json:"url"`
@@ -104,7 +122,7 @@ type PullRequestPromotion struct {
 	// fields.
 	// For SSH repositories the Secret must contain 'identity'
 	// and 'known_hosts' fields.
-	// For the GitHub API the Secret must contain a 'token' field.
+	// For Git Provider API to manage pull requests, it must contain a 'token' field.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }

@@ -124,7 +124,8 @@ func createTestPipelineWithPromotion(g *WithT, t *testing.T) v1alpha1.Pipeline {
 	p.Spec.Promotion = &v1alpha1.Promotion{
 		Strategy: v1alpha1.Strategy{
 			PullRequest: &v1alpha1.PullRequestPromotion{
-				URL: "foobar",
+				URL:  "foobar",
+				Type: "github",
 			},
 		},
 	}
@@ -202,7 +203,7 @@ func TestVerifyXSignature(t *testing.T) {
 	pipeline := createTestPipelineWithPromotion(g, t)
 	secret := createHmacSecret(g, t, pipeline)
 
-	pipeline.Spec.AppRef.SecretRef = &meta.LocalObjectReference{
+	pipeline.Spec.Promotion.Strategy.SecretRef = &meta.LocalObjectReference{
 		Name: secret.Name,
 	}
 	g.Expect(k8sClient.Update(context.Background(), &pipeline)).To(Succeed())

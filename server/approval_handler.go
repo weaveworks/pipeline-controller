@@ -170,7 +170,7 @@ func (h DefaultApprovalHandler) resetWaitingApproval(ctx context.Context, pipeli
 
 func (h DefaultApprovalHandler) verifyXSignature(ctx context.Context, p pipelinev1alpha1.Pipeline, header http.Header, body []byte) error {
 	// If not secret defined just ignore the X-Signature checking
-	if p.Spec.AppRef.SecretRef == nil {
+	if p.Spec.Promotion == nil || p.Spec.Promotion.Strategy.SecretRef == nil {
 		return nil
 	}
 
@@ -180,7 +180,7 @@ func (h DefaultApprovalHandler) verifyXSignature(ctx context.Context, p pipeline
 
 	s := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      p.Spec.AppRef.SecretRef.Name,
+			Name:      p.Spec.Promotion.Strategy.SecretRef.Name,
 			Namespace: p.Namespace,
 		},
 	}

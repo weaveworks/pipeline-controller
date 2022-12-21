@@ -28,7 +28,8 @@ func TestReconcile(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	ctx := context.Background()
 
-	t.Run("sets cluster not found condition", func(t *testing.T) {
+	t.Run("sets cluster not found condition", func(_ *testing.T) {
+		eventRecorder.Reset()
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -40,9 +41,15 @@ func TestReconcile(t *testing.T) {
 		}})
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
+
+		events := eventRecorder.Events()
+		g.Expect(events).ToNot(BeEmpty())
+		g.Expect(events[0].reason).To(Equal("SetStatusConditionError"))
+		g.Expect(events[0].message).To(ContainSubstring("GitopsCluster.gitops.weave.works \"wrong-cluster\" not found; requeue"))
 	})
 
-	t.Run("sets reconciliation succeeded condition", func(t *testing.T) {
+	t.Run("sets reconciliation succeeded condition", func(_ *testing.T) {
+		eventRecorder.Reset()
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -53,15 +60,26 @@ func TestReconcile(t *testing.T) {
 		pipeline := newPipeline(ctx, g, name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{gc})
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+
+		events := eventRecorder.Events()
+		g.Expect(events).ToNot(BeEmpty())
+		g.Expect(events[0].reason).To(Equal("Updated"))
+		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
 	})
 
-	t.Run("sets reconciliation succeeded condition without clusterRef", func(t *testing.T) {
+	t.Run("sets reconciliation succeeded condition without clusterRef", func(_ *testing.T) {
+		eventRecorder.Reset()
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+
+		events := eventRecorder.Events()
+		g.Expect(events).ToNot(BeEmpty())
+		g.Expect(events[0].reason).To(Equal("Updated"))
+		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
 	})
 }
 

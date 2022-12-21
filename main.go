@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -22,7 +24,6 @@ import (
 	"github.com/weaveworks/pipeline-controller/controllers"
 	"github.com/weaveworks/pipeline-controller/server"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
-	"github.com/weaveworks/pipeline-controller/server/strategy/githubpr"
 	"github.com/weaveworks/pipeline-controller/server/strategy/notification"
 )
 
@@ -110,7 +111,10 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	ghStrat, err := githubpr.NewGitHubPR(mgr.GetClient(), log.WithValues("strategy", "githubpr"))
+	pullRequestStrategy, err := pullrequest.New(
+		mgr.GetClient(),
+		log.WithValues("strategy", "pullrequest"),
+	)
 	if err != nil {
 		setupLog.Error(err, "unable to create GitHub promotion strategy")
 		os.Exit(1)
@@ -124,7 +128,7 @@ func main() {
 	notificationStrat, _ := notification.NewNotification(mgr.GetClient(), eventRecorder)
 
 	var stratReg strategy.StrategyRegistry
-	stratReg.Register(ghStrat)
+	stratReg.Register(pullRequestStrategy)
 	stratReg.Register(notificationStrat)
 
 	promServer, err := server.NewPromotionServer(

@@ -1,4 +1,4 @@
-package githubpr
+package pullrequest
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 )
 
-func (s GitHubPR) cloneRepo(ctx context.Context, prSpec v1alpha1.PullRequestPromotion, dir string, credentials map[string][]byte) (git.RepositoryClient, error) {
+func (s PullRequest) cloneRepo(ctx context.Context, prSpec v1alpha1.PullRequestPromotion, dir string, credentials map[string][]byte) (git.RepositoryClient, error) {
 	u, err := url.Parse(prSpec.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing URL from spec: %w", err)
