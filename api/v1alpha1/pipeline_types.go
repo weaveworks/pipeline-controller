@@ -60,7 +60,7 @@ type PipelineSpec struct {
 
 func (ps PipelineSpec) GetPromotion(env string) *Promotion {
 	for _, e := range ps.Environments {
-		if e.Name == env {
+		if e.Name == env && e.Promotion != nil {
 			return e.Promotion
 		}
 	}
