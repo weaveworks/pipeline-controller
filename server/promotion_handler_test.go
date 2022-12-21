@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
@@ -424,4 +425,30 @@ func TestPromotionWithoutUnknownStrategy(t *testing.T) {
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
 	g.Expect(resp.Body.String()).To(Equal("error promoting application, please consult the promotion server's logs"))
+}
+
+func TestPromotionWithManualGate(t *testing.T) {
+	g := testingutils.NewGomegaWithT(t)
+
+	p := buildTestPipeline()
+	p.Spec.Promotion = &v1alpha1.Promotion{
+		Manual: true,
+		Strategy: v1alpha1.Strategy{
+			Notification: &v1alpha1.NotificationPromotion{},
+		},
+	}
+	createPipeline(g, t, p)
+
+	strat := introspectableStrategy{}
+	stratReg := strategy.StrategyRegistry{&strat}
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient)
+
+	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
+	g.Expect(resp.Code).To(Equal(http.StatusNoContent))
+	g.Expect(resp.Body.String()).To(Equal(""))
+
+	updatedPipeline := &v1alpha1.Pipeline{}
+	k8sClient.Get(context.Background(), client.ObjectKeyFromObject(&p), updatedPipeline)
+
+	g.Expect(updatedPipeline.Status.Environments["prod"].WaitingApproval.Revision).To(Equal("5.0.0"))
 }
