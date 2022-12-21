@@ -161,21 +161,21 @@ func createHmacSecret(g *WithT, t *testing.T, p v1alpha1.Pipeline) corev1.Secret
 	return secret
 }
 
-func TestGet(t *testing.T) {
+func TestPromotionGet(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.DefaultPromotionHandler{}
 	resp := requestTo(g, h, http.MethodGet, "/", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusMethodNotAllowed))
 }
 
-func TestPostWithWrongPath(t *testing.T) {
+func TestPromotionPostWithWrongPath(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil)
 	resp := requestTo(g, h, http.MethodPost, "/", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
 
-func TestPostWithNoBody(t *testing.T) {
+func TestPromotionPostWithNoBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient)
 	createTestPipeline(g, t)
@@ -183,7 +183,7 @@ func TestPostWithNoBody(t *testing.T) {
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 
-func TestPostWithIncompatibleBody(t *testing.T) {
+func TestPromotionPostWithIncompatibleBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient)
 	createTestPipeline(g, t)
@@ -191,14 +191,14 @@ func TestPostWithIncompatibleBody(t *testing.T) {
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 
-func TestPostWithUnknownPipeline(t *testing.T) {
+func TestPromotionPostWithUnknownPipeline(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient)
 	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
 
-func TestVerifyXSignature(t *testing.T) {
+func TestPromotionVerifyXSignature(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 
 	pipeline := createTestPipelineWithPromotion(g, t)
@@ -239,7 +239,7 @@ func TestVerifyXSignature(t *testing.T) {
 	})
 }
 
-func TestInvolvedObjectDoesntMatch(t *testing.T) {
+func TestPromotionInvolvedObjectDoesntMatch(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)
 	tests := []struct {

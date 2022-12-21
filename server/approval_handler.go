@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 
@@ -51,13 +50,6 @@ func (h DefaultApprovalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 	env := pathMatches[3]
 	revision := pathMatches[4]
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		h.log.V(logger.DebugLevel).Error(err, "reading request body")
-		rw.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
 	var pipeline pipelinev1alpha1.Pipeline
 	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.PipelineNamespace, Name: promotion.PipelineName}, &pipeline); err != nil {
 		h.log.V(logger.InfoLevel).Info("could not fetch Pipeline object", "error", err)
@@ -69,7 +61,7 @@ func (h DefaultApprovalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := verifyXSignature(r.Context(), h.c, pipeline, r.Header, body); err != nil {
+	if err := verifyXSignature(r.Context(), h.c, pipeline, r.Header, []byte("")); err != nil {
 		h.log.V(logger.DebugLevel).Error(err, "failed verifying X-Signature header")
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
