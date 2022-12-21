@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,9 +9,7 @@ import (
 
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -72,7 +69,7 @@ func (h DefaultApprovalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.verifyXSignature(r.Context(), pipeline, r.Header, body); err != nil {
+	if err := verifyXSignature(r.Context(), h.c, pipeline, r.Header, body); err != nil {
 		h.log.V(logger.DebugLevel).Error(err, "failed verifying X-Signature header")
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
@@ -163,40 +160,5 @@ func (h DefaultApprovalHandler) resetWaitingApproval(ctx context.Context, pipeli
 
 	pipeline.Status.ResetWaitingApproval(env)
 
-	fmt.Printf("%+v\n", pipeline.Status)
-
 	return h.c.Status().Update(ctx, &pipeline)
-}
-
-func (h DefaultApprovalHandler) verifyXSignature(ctx context.Context, p pipelinev1alpha1.Pipeline, header http.Header, body []byte) error {
-	// If not secret defined just ignore the X-Signature checking
-	if p.Spec.Promotion == nil || p.Spec.Promotion.Strategy.SecretRef == nil {
-		return nil
-	}
-
-	if len(header[SignatureHeader]) == 0 {
-		return errors.New("no X-Signature header provided")
-	}
-
-	s := &corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      p.Spec.Promotion.Strategy.SecretRef.Name,
-			Namespace: p.Namespace,
-		},
-	}
-
-	if err := h.c.Get(ctx, client.ObjectKeyFromObject(s), s); err != nil {
-		return fmt.Errorf("failed fetching Secret %s/%s: %w", s.Namespace, s.Name, err)
-	}
-
-	key := s.Data["hmac-key"]
-	if len(key) == 0 {
-		return fmt.Errorf("no 'hmac-key' field present in %s/%s Spec.AppRef.SecretRef", p.Namespace, s.Name)
-	}
-
-	if err := verifySignature(header[SignatureHeader][0], body, key); err != nil {
-		return fmt.Errorf("failed verifying X-Signature header: %s", err)
-	}
-
-	return nil
 }
