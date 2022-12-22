@@ -53,6 +53,9 @@ func main() {
 		logOptions                        logger.Options
 		promotionRateLimit                int
 		promotionRateLimitIntervalSeconds int
+		promotionRetryDelaySeconds        int
+		promotionRetryMaxDelaySeconds     int
+		promotionRetryFailureThreshold    int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -62,8 +65,15 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.IntVar(&promotionRateLimit, "promotion-hook-rate-limit", server.DefaultRateLimitCount, "Promotion webhook rate limit, maximum number of requests in set interval")
-	flag.IntVar(&promotionRateLimitIntervalSeconds, "promotion-hook-rate-limit-interval", server.DefaultRateLimitInterval, "Promotion webhook rate limit interval")
+
+	// Rate limit
+	flag.IntVar(&promotionRateLimit, "promotion-hook-rate-limit", server.DefaultRateLimitCount, "Promotion webhook rate limit, maximum number of requests in set interval.")
+	flag.IntVar(&promotionRateLimitIntervalSeconds, "promotion-hook-rate-limit-interval", server.DefaultRateLimitInterval, "Promotion webhook rate limit interval.")
+
+	// Retry
+	flag.IntVar(&promotionRetryDelaySeconds, "promotion-retry-delay", server.DefaultRetryDelay, "Delay between promotion retries in seconds.")
+	flag.IntVar(&promotionRetryMaxDelaySeconds, "promotion-retry-max-delay", server.DefaultRetryMaxDelay, "Maximum delay between promotion retries.")
+	flag.IntVar(&promotionRetryFailureThreshold, "promotion-retry-threshold", server.DefaultRetryThreshold, "How many times a promotion should be retried.")
 
 	logOptions.BindFlags(flag.CommandLine)
 
@@ -139,6 +149,7 @@ func main() {
 	promServer, err := server.NewPromotionServer(
 		mgr.GetClient(),
 		server.WithRateLimit(promotionRateLimit, time.Duration(promotionRateLimitIntervalSeconds)*time.Second),
+		server.WithRetry(promotionRetryDelaySeconds, promotionRetryMaxDelaySeconds, promotionRetryFailureThreshold),
 		server.Logger(log.WithName("promotion")),
 		server.ListenAddr(promServerAddr),
 		server.StrategyRegistry(stratReg),
