@@ -448,7 +448,7 @@ func TestPromotionWithManualGate(t *testing.T) {
 	g.Expect(resp.Body.String()).To(Equal(""))
 
 	updatedPipeline := &v1alpha1.Pipeline{}
-	k8sClient.Get(context.Background(), client.ObjectKeyFromObject(&p), updatedPipeline)
+	g.Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(&p), updatedPipeline)).To(Succeed())
 
 	g.Expect(updatedPipeline.Status.Environments["prod"].WaitingApproval.Revision).To(Equal("5.0.0"))
 }
