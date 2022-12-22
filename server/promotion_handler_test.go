@@ -276,7 +276,7 @@ func TestInvolvedObjectDoesntMatch(t *testing.T) {
 			tt.transform(&ev)
 			resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, ev))
 			g.Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
-			g.Expect(resp.Body.String()).To(Equal("involved object doesn't match Pipeline definition"))
+			g.Expect(resp.Body.String()).To(Equal("involved object does not match Pipeline definition"))
 		})
 	}
 }
