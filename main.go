@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 
@@ -44,12 +45,14 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr          string
-		eventsAddr           string
-		enableLeaderElection bool
-		probeAddr            string
-		promServerAddr       string
-		logOptions           logger.Options
+		metricsAddr                       string
+		eventsAddr                        string
+		enableLeaderElection              bool
+		probeAddr                         string
+		promServerAddr                    string
+		logOptions                        logger.Options
+		promotionRateLimit                int
+		promotionRateLimitIntervalSeconds int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -59,6 +62,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.IntVar(&promotionRateLimit, "promotion-hook-rate-limit", server.DefaultRateLimitCount, "Promotion webhook rate limit, maximum number of requests in set interval")
+	flag.IntVar(&promotionRateLimitIntervalSeconds, "promotion-hook-rate-limit-interval", server.DefaultRateLimitInterval, "Promotion webhook rate limit interval")
 
 	logOptions.BindFlags(flag.CommandLine)
 
@@ -133,6 +138,7 @@ func main() {
 
 	promServer, err := server.NewPromotionServer(
 		mgr.GetClient(),
+		server.WithRateLimit(promotionRateLimit, time.Duration(promotionRateLimitIntervalSeconds)*time.Second),
 		server.Logger(log.WithName("promotion")),
 		server.ListenAddr(promServerAddr),
 		server.StrategyRegistry(stratReg),

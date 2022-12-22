@@ -21,6 +21,11 @@ import (
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
+const (
+	DefaultRateLimitCount    = 20
+	DefaultRateLimitInterval = 30
+)
+
 type PromotionServer struct {
 	log              logr.Logger
 	c                client.Client
@@ -29,6 +34,12 @@ type PromotionServer struct {
 	promHandler      http.Handler
 	promEndpointName string
 	stratReg         strategy.StrategyRegistry
+	rateLimit        rateLimit
+}
+
+type rateLimit struct {
+	count    int
+	interval time.Duration
 }
 
 type Opt func(s *PromotionServer) error
@@ -46,6 +57,10 @@ func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) 
 
 	s := &PromotionServer{
 		c: c,
+		rateLimit: rateLimit{
+			count:    DefaultRateLimitCount,
+			interval: time.Second * DefaultRateLimitInterval,
+		},
 	}
 
 	for _, opt := range opts {
@@ -62,6 +77,15 @@ func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) 
 	s.listener = listener
 
 	return s, nil
+}
+
+func WithRateLimit(count int, interval time.Duration) Opt {
+	return func(s *PromotionServer) error {
+		s.rateLimit.count = count
+		s.rateLimit.interval = interval
+
+		return nil
+	}
 }
 
 func setDefaults(s *PromotionServer) {
@@ -108,7 +132,7 @@ func (s PromotionServer) rateLimitMiddleware(limiter *ratelimiter.Limiter, h htt
 		if limit, err := limiter.Hit(ip); err != nil {
 			log.Error(err, "rate limit hit", "ip", ip)
 			w.Header().Add("Retry-After", limit.Created.Add(limiter.Duration).Format(time.RFC1123))
-			w.WriteHeader(http.StatusServiceUnavailable)
+			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
 
@@ -120,8 +144,8 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	pathPrefix := "/promotion/"
 
 	limiter := ratelimiter.New(
-		ratelimiter.WithLimit(5),
-		ratelimiter.WithDuration(time.Second*30),
+		ratelimiter.WithLimit(s.rateLimit.count),
+		ratelimiter.WithDuration(s.rateLimit.interval),
 	)
 
 	mux := http.NewServeMux()
