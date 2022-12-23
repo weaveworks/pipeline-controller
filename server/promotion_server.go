@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
@@ -15,7 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/pkg/ratelimiter"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
+)
+
+const (
+	DefaultRateLimitCount    = 20
+	DefaultRateLimitInterval = 30
 )
 
 type PromotionServer struct {
@@ -26,6 +34,12 @@ type PromotionServer struct {
 	promHandler      http.Handler
 	promEndpointName string
 	stratReg         strategy.StrategyRegistry
+	rateLimit        rateLimit
+}
+
+type rateLimit struct {
+	count    int
+	interval time.Duration
 }
 
 type Opt func(s *PromotionServer) error
@@ -43,6 +57,10 @@ func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) 
 
 	s := &PromotionServer{
 		c: c,
+		rateLimit: rateLimit{
+			count:    DefaultRateLimitCount,
+			interval: time.Second * DefaultRateLimitInterval,
+		},
 	}
 
 	for _, opt := range opts {
@@ -59,6 +77,15 @@ func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) 
 	s.listener = listener
 
 	return s, nil
+}
+
+func WithRateLimit(count int, interval time.Duration) Opt {
+	return func(s *PromotionServer) error {
+		s.rateLimit.count = count
+		s.rateLimit.interval = interval
+
+		return nil
+	}
 }
 
 func setDefaults(s *PromotionServer) {
@@ -82,11 +109,52 @@ func setDefaults(s *PromotionServer) {
 	}
 }
 
+func getRealIP(r *http.Request) string {
+	address := r.Header.Get("X-Real-IP")
+	if address == "" {
+		address = r.Header.Get("X-Forwarder-For")
+	}
+	if address == "" {
+		address = r.RemoteAddr
+	}
+
+	if strings.Contains(address, ":") {
+		address = strings.Split(address, ":")[0]
+	}
+
+	return address
+}
+
+func (s PromotionServer) rateLimitMiddleware(limiter *ratelimiter.Limiter, h http.Handler) http.Handler {
+	log := s.log.WithValues("kind", "promotion webhook rate limiter")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := getRealIP(r)
+		if limit, err := limiter.Hit(ip); err != nil {
+			log.Error(err, "rate limit hit", "ip", ip)
+			w.Header().Add("Retry-After", limit.Created.Add(limiter.Duration).Format(time.RFC1123))
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+
+		h.ServeHTTP(w, r)
+	})
+}
+
 func (s PromotionServer) Start(ctx context.Context) error {
 	pathPrefix := "/promotion/"
 
+	limiter := ratelimiter.New(
+		ratelimiter.WithLimit(s.rateLimit.count),
+		ratelimiter.WithDuration(s.rateLimit.interval),
+	)
+
 	mux := http.NewServeMux()
-	mux.Handle(pathPrefix, http.StripPrefix(s.promEndpointName, s.promHandler))
+	mux.Handle(pathPrefix,
+		s.rateLimitMiddleware(
+			limiter,
+			http.StripPrefix(s.promEndpointName, s.promHandler),
+		),
+	)
 	mux.Handle("/healthz", healthz.CheckHandler{Checker: healthz.Ping})
 
 	srv := http.Server{
@@ -106,6 +174,8 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	}()
 
 	<-ctx.Done()
+
+	limiter.Shutdown()
 
 	return srv.Shutdown(ctx)
 }
