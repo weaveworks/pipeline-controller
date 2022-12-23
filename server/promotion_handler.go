@@ -106,7 +106,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 	if err != nil {
 		h.log.Error(err, "error looking up next environment")
 		rw.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprint(rw, template.HTMLEscapeString(err.Error()))
+		template.HTMLEscape(rw, []byte(err.Error()))
 		return
 	}
 	promotion.Environment = *promEnv
