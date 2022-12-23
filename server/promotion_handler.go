@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"html/template"
 	"io"
 	"net/http"
 	"regexp"
@@ -103,8 +104,9 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 
 	promEnv, err := lookupNextEnvironment(pipeline, env, ev.InvolvedObject)
 	if err != nil {
+		h.log.Error(err, "error looking up next environment")
 		rw.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprint(rw, err.Error())
+		fmt.Fprint(rw, template.HTMLEscapeString(err.Error()))
 		return
 	}
 	promotion.Environment = *promEnv
@@ -167,7 +169,7 @@ func lookupNextEnvironment(pipeline pipelinev1alpha1.Pipeline, env string, appRe
 		pipeline.Spec.AppRef.Kind != appRef.Kind ||
 		pipeline.Spec.AppRef.Name != appRef.Name ||
 		!namespaceInTargets(sourceEnv.Targets, appRef.Namespace) {
-		return nil, fmt.Errorf("involved object doesn't match Pipeline definition")
+		return nil, fmt.Errorf("involved object does not match Pipeline definition")
 	}
 	return promEnv, nil
 }
