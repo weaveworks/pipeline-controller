@@ -6,6 +6,8 @@ import (
 	"github.com/fluxcd/go-git-providers/gitlab"
 	"github.com/fluxcd/go-git-providers/gitprovider"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"log"
+	"strings"
 )
 
 var (
@@ -53,12 +55,13 @@ func NewGitProviderClientFactory() GitProviderClientFactory {
 		clientOptions = append(clientOptions, gitprovider.WithOAuth2Token(provider.Token))
 
 		if provider.DestructiveCalls {
-			//TODO bring visibility to this action
+			log.Println("creating client with destructive calls enabled")
 			clientOptions = append(clientOptions, gitprovider.WithDestructiveAPICalls(provider.DestructiveCalls))
 		}
 
 		if provider.Hostname != "" {
-			clientOptions = append(clientOptions, gitprovider.WithDomain(provider.Hostname))
+			domain := addSchemeToDomain(provider.Hostname)
+			clientOptions = append(clientOptions, gitprovider.WithDomain(domain))
 		}
 
 		switch provider.Type {
@@ -78,6 +81,18 @@ func NewGitProviderClientFactory() GitProviderClientFactory {
 		return client, err
 	}
 
+}
+
+// TODO review me when https://github.com/fluxcd/go-git-providers/issues/175 and
+// https://github.com/fluxcd/go-git-providers/issues/176 are fixed
+// we need to hack this to add the https scheme to the domain to
+// have a gitlab client with a correct baseurl otherwise would create an invalid url
+func addSchemeToDomain(domain string) string {
+	// Fixing https:// again (ggp quirk)
+	if domain != "github.com" && domain != "gitlab.com" && !strings.HasPrefix(domain, "http://") && !strings.HasPrefix(domain, "https://") {
+		return "https://" + domain
+	}
+	return domain
 }
 
 func gitProviderIsValid(gitProviderType v1alpha1.GitProviderType) (bool, error) {

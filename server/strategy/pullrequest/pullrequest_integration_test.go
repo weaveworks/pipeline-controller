@@ -46,8 +46,9 @@ spec:
       interval: 1m
 `
 
-	githubConfig := gitProviderConfig(t, v1alpha1.Github, "GITHUB_USER", "GITHUB_TOKEN")
-	gitlabConfig := gitProviderConfig(t, v1alpha1.Gitlab, "GITLAB_USER", "GITLAB_TOKEN")
+	githubConfig := gitProviderConfig(t, v1alpha1.Github, "GITHUB_USER", "GITHUB_TOKEN", "")
+	gitlabConfig := gitProviderConfig(t, v1alpha1.Gitlab, "GITLAB_USER", "GITLAB_TOKEN", "")
+	gitlabEnterpriseConfig := gitProviderConfig(t, v1alpha1.Gitlab, "GITLAB_ENTERPRISE_USER", "GITLAB_ENTERPRISE_TOKEN", "https://gitlab.git.dev.weave.works")
 
 	tests := []struct {
 		name       string
@@ -59,7 +60,7 @@ spec:
 		errPattern string
 	}{
 		{
-			"can promote github",
+			"can promote github.com",
 			githubConfig,
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
@@ -99,7 +100,7 @@ spec:
 			"",
 		},
 		{
-			"can promote gitlab",
+			"can promote gitlab.com",
 			gitlabConfig,
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
@@ -132,6 +133,47 @@ spec:
 						"token":    []byte(gitlabConfig.gitProviderConfig.Token),
 						"username": []byte(gitlabConfig.username),
 						"password": []byte(gitlabConfig.gitProviderConfig.Token),
+					},
+				},
+			},
+			nil,
+			"",
+		},
+		{
+			"can promote gitlab enterprise",
+			gitlabEnterpriseConfig,
+			v1alpha1.Promotion{
+				PullRequest: &v1alpha1.PullRequestPromotion{
+					Type: v1alpha1.Gitlab,
+					URL:  "https://gitlab.git.dev.weave.works/pipeline-controller/pipeline-controller-e2e",
+					SecretRef: meta.LocalObjectReference{
+						Name: "repo-credentials",
+					},
+				},
+			},
+			strategy.Promotion{
+				PipelineNamespace: "foo",
+				PipelineName:      "bar",
+				Environment: v1alpha1.Environment{
+					Name: "prod",
+					Targets: []v1alpha1.Target{
+						{
+							Namespace: "default",
+						},
+					},
+				},
+				Version: "6.0.0",
+			},
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{
+						Namespace: "foo",
+						Name:      "repo-credentials",
+					},
+					Data: map[string][]byte{
+						"token":    []byte(gitlabEnterpriseConfig.gitProviderConfig.Token),
+						"username": []byte(gitlabEnterpriseConfig.username),
+						"password": []byte(gitlabEnterpriseConfig.gitProviderConfig.Token),
 					},
 				},
 			},
@@ -204,7 +246,7 @@ func createTestRepo(config Config, client gitprovider.Client) (gitprovider.UserR
 	})
 }
 
-func gitProviderConfig(t *testing.T, gitProviderType v1alpha1.GitProviderType, userEnv string, tokenEnv string) Config {
+func gitProviderConfig(t *testing.T, gitProviderType v1alpha1.GitProviderType, userEnv string, tokenEnv string, hostname string) Config {
 
 	username := os.Getenv(userEnv)
 	require.NotEmpty(t, username)
@@ -218,6 +260,7 @@ func gitProviderConfig(t *testing.T, gitProviderType v1alpha1.GitProviderType, u
 			Type:             gitProviderType,
 			TokenType:        "oauth2",
 			DestructiveCalls: true,
+			Hostname:         hostname,
 		},
 	}
 }

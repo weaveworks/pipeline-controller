@@ -155,22 +155,25 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 		return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
 	}
 
-	hostname := userRepoRef.Domain
 	provider := GitProviderConfig{
 		Token:            token,
 		TokenType:        "oauth2",
 		Type:             gitProviderType,
-		Hostname:         hostname,
+		Hostname:         userRepoRef.Domain,
 		DestructiveCalls: false,
 	}
-	client, err := s.gitClientFactory(provider)
 
+	client, err := s.gitClientFactory(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating git provider client: %w", err)
 	}
+	//TODO: review me when https://github.com/fluxcd/go-git-providers/issues/176
+	// and https://github.com/fluxcd/go-git-providers/issues/175
+	// are fixed
+	userRepoRef.Domain = client.SupportedDomain()
 	userRepo, err := client.UserRepositories().Get(ctx, *userRepoRef)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve repository: ")
+		return nil, errors.Wrap(err, "failed to retrieve repository")
 	}
 
 	newTitle := fmt.Sprintf("Promote %s/%s in %s to %s",
