@@ -42,6 +42,10 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
 
+		waitUntilWithTimeout(time.Millisecond*100, 10, func() bool {
+			return len(eventRecorder.Events()) > 0
+		})
+
 		events := eventRecorder.Events()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("SetStatusConditionError"))
@@ -61,6 +65,10 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 
+		waitUntilWithTimeout(time.Millisecond*100, 10, func() bool {
+			return len(eventRecorder.Events()) > 0
+		})
+
 		events := eventRecorder.Events()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("Updated"))
@@ -75,6 +83,10 @@ func TestReconcile(t *testing.T) {
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+
+		waitUntilWithTimeout(time.Millisecond*100, 10, func() bool {
+			return len(eventRecorder.Events()) > 0
+		})
 
 		events := eventRecorder.Events()
 		g.Expect(events).ToNot(BeEmpty())
@@ -143,4 +155,13 @@ func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters
 	g.Expect(k8sClient.Create(ctx, &pipeline)).To(Succeed())
 
 	return &pipeline
+}
+
+func waitUntilWithTimeout(delay time.Duration, retries int, condition func() bool) {
+	for ; retries > 0; retries-- {
+		if condition() {
+			return
+		}
+		time.Sleep(delay)
+	}
 }
