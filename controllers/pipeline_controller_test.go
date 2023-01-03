@@ -42,6 +42,8 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
 
+		g.Eventually(eventRecorder.Events, time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
+
 		events := eventRecorder.Events()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("SetStatusConditionError"))
@@ -61,6 +63,8 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 
+		g.Eventually(eventRecorder.Events, time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
+
 		events := eventRecorder.Events()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("Updated"))
@@ -75,6 +79,8 @@ func TestReconcile(t *testing.T) {
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+
+		g.Eventually(eventRecorder.Events, time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
 
 		events := eventRecorder.Events()
 		g.Expect(events).ToNot(BeEmpty())
