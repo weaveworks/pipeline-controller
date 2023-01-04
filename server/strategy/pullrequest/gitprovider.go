@@ -27,7 +27,7 @@ type GitProviderConfig struct {
 }
 
 // same as https://github.com/weaveworks/weave-gitops-enterprise/blob/7ef05e773d7650a83cfa86dbd642253353b584c0/cmd/clusters-service/pkg/git/git.go#L286
-func newGitProviderClientFactory() GitProviderClientFactory {
+func NewGitProviderClientFactory() GitProviderClientFactory {
 	return func(provider GitProviderConfig) (gitprovider.Client, error) {
 		var client gitprovider.Client
 		var err error

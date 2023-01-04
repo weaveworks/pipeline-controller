@@ -3,11 +3,11 @@ package testingutils
 import (
 	"testing"
 
-	Ω "github.com/onsi/gomega"
+	"github.com/onsi/gomega"
 )
 
-func NewGomegaWithT(t *testing.T) *Ω.WithT {
-	g := Ω.NewGomegaWithT(t)
+func NewGomegaWithT(t *testing.T) *gomega.WithT {
+	g := gomega.NewWithT(t)
 	g.Fail = func(message string, _ ...int) {
 		t.Helper()
 		t.Logf("\n%s", message)
