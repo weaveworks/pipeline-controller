@@ -42,3 +42,13 @@ func StrategyRegistry(stratReg strategy.StrategyRegistry) Opt {
 		return nil
 	}
 }
+
+func WithRetry(delay, maxDelay, threshold int) Opt {
+	return func(s *PromotionServer) error {
+		s.retry.Delay = delay
+		s.retry.MaxDelay = maxDelay
+		s.retry.Threshold = threshold
+
+		return nil
+	}
+}

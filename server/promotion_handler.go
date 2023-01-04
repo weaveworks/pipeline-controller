@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/pkg/retry"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
@@ -35,13 +36,15 @@ type DefaultPromotionHandler struct {
 	log      logr.Logger
 	c        client.Client
 	stratReg strategy.StrategyRegistry
+	retry    RetryOpts
 }
 
-func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client) DefaultPromotionHandler {
+func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegistry, c client.Client, retryOpts RetryOpts) DefaultPromotionHandler {
 	return DefaultPromotionHandler{
 		log:      log,
 		c:        c,
 		stratReg: stratReg,
+		retry:    retryOpts,
 	}
 }
 
@@ -135,11 +138,29 @@ func (h DefaultPromotionHandler) promote(ctx context.Context, p pipelinev1alpha1
 		return nil, fmt.Errorf("no promotion configured in Pipeline resource")
 	}
 
-	strat, err := h.stratReg.Get(*promotionSpec)
-	if err != nil {
-		return nil, fmt.Errorf("error getting strategy from registry: %w", err)
-	}
-	return strat.Promote(ctx, *promotionSpec, prom)
+	var res *strategy.PromotionResult
+
+	err := retry.Exponential(
+		retry.WithRetries(h.retry.Threshold),
+		retry.WithDelayBase(float64(h.retry.Delay)),
+		retry.WithMaxDelay(float64(h.retry.MaxDelay)),
+		retry.WithErrorHandler(func(err error) bool {
+			h.log.Error(err, "retry promotion")
+
+			return false
+		}),
+		retry.WithFn(func() error {
+			strat, err := h.stratReg.Get(*promotionSpec)
+			if err != nil {
+				return fmt.Errorf("error getting strategy from registry: %w", err)
+			}
+
+			res, err = strat.Promote(ctx, *promotionSpec, prom)
+			return err
+		}),
+	)
+
+	return res, err
 }
 
 // lookupNextEnvironment searches the pipeline for the given environment name and returns the subsequent environment. The given pipeline's appRef
