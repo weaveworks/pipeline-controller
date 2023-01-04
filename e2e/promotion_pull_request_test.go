@@ -85,7 +85,8 @@ func TestPullRequestPromotions(t *testing.T) {
 			t.Cleanup(func() {
 				log.Println("cleaning test")
 				//restore helm release version
-				releaseNewVersion(g, k8sClient, helmRelease, promotion.currentVersion)
+				released := releaseNewVersion(g, k8sClient, helmRelease, promotion.currentVersion)
+				g.Expect(released).To(BeTrue())
 				helmRelease, err = ensureHelmRelease(g, pipeline, k8sClient, promotion.currentVersion)
 				//delete git branch
 				err := deleteGitBranchByName(context.Background(), g, k8sClient, pipeline, promotion.branchName)
@@ -95,7 +96,8 @@ func TestPullRequestPromotions(t *testing.T) {
 			})
 
 			//When promoted
-			releaseNewVersion(g, k8sClient, helmRelease, promotion.newVersion)
+			released := releaseNewVersion(g, k8sClient, helmRelease, promotion.newVersion)
+			g.Expect(released).To(BeTrue())
 			helmRelease, err = ensureHelmRelease(g, pipeline, k8sClient, promotion.newVersion)
 			g.Expect(err).To(BeNil())
 
@@ -260,12 +262,12 @@ func assertPullRequestCreated(g *WithT, clientset *kubernetes.Clientset, pipelin
 	}).Should(BeTrue())
 }
 
-func releaseNewVersion(g *WithT, c client.Client, devHelmRelease v2beta1.HelmRelease, newVersion string) {
+func releaseNewVersion(g *WithT, c client.Client, devHelmRelease v2beta1.HelmRelease, newVersion string) bool {
 	log.Println("patching helm release")
 	ctx := context.Background()
 	// Release by patching a helm release like
 	// kubectl patch helmreleases.helm.toolkit.fluxcd.io -n dev podinfo -p '{"spec":{"chart":{"spec": {"version": "6.0.0"}}}}' --type=merge
-	g.Eventually(func() bool {
+	return g.Eventually(func() bool {
 		patchString := fmt.Sprintf("{\"spec\":{\"chart\":{\"spec\": {\"version\": \"%s\"}}}}", newVersion)
 		patch := []byte(patchString)
 		var err error
@@ -319,18 +321,17 @@ func ensurePipeline(g *WithT, c client.Client, pipelineNamespace string, pipelin
 }
 
 func deletePodsByNamespaceAndLabel(g *WithT, namespace string, labelSelector string) bool {
-	g.Eventually(func() bool {
+	return g.Eventually(func() bool {
 		ctx := context.Background()
 		listOptions := metav1.ListOptions{
 			LabelSelector: labelSelector,
 		}
 		deleteOptions := metav1.DeleteOptions{}
 		if err := clientset.CoreV1().Pods(namespace).DeleteCollection(ctx, deleteOptions, listOptions); err != nil {
-			log.Printf("coudl not delete helm controller: %s", err)
+			log.Printf("coudl not delete pods: %s", err)
 			return false
 		}
 		log.Printf("pod deleted: %s", labelSelector)
 		return true
 	}).Should(BeTrue())
-	return true
 }
