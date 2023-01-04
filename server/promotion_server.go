@@ -24,6 +24,9 @@ import (
 const (
 	DefaultRateLimitCount    = 20
 	DefaultRateLimitInterval = 30
+	DefaultRetryDelay        = 2
+	DefaultRetryMaxDelay     = 20
+	DefaultRetryThreshold    = 3
 )
 
 type PromotionServer struct {
@@ -37,11 +40,18 @@ type PromotionServer struct {
 	approvalEndpointName string
 	stratReg             strategy.StrategyRegistry
 	rateLimit            rateLimit
+	retry                RetryOpts
 }
 
 type rateLimit struct {
 	count    int
 	interval time.Duration
+}
+
+type RetryOpts struct {
+	Delay     int
+	MaxDelay  int
+	Threshold int
 }
 
 type Opt func(s *PromotionServer) error
@@ -105,6 +115,7 @@ func setDefaults(s *PromotionServer) {
 			s.log.WithName("handler"),
 			s.stratReg,
 			s.c,
+			s.retry,
 		)
 	}
 	if s.promEndpointName == "" {
