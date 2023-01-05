@@ -10,6 +10,7 @@ import (
 
 	"github.com/fluxcd/helm-controller/api/v2beta1"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,19 +34,23 @@ type testEvent struct {
 }
 
 type testEventRecorder struct {
-	events []testEvent
+	events map[string][]testEvent
 }
 
-func (t *testEventRecorder) Events() []testEvent {
-	return t.events
+func (t *testEventRecorder) Events(name string) []testEvent {
+	return t.events[name]
 }
 
 func (t *testEventRecorder) Reset() {
-	t.events = []testEvent{}
+	t.events = map[string][]testEvent{}
 }
 
 func (t *testEventRecorder) Event(object runtime.Object, eventtype string, reason string, message string) {
-	t.events = append(t.events, testEvent{
+	key := ""
+	if objMeta, err := meta.Accessor(object); err == nil {
+		key = fmt.Sprintf("%s/%s", objMeta.GetNamespace(), objMeta.GetName())
+	}
+	t.events[key] = append(t.events[key], testEvent{
 		object:    object,
 		eventType: eventtype,
 		reason:    reason,
@@ -55,7 +60,11 @@ func (t *testEventRecorder) Event(object runtime.Object, eventtype string, reaso
 
 // Eventf is just like Event, but with Sprintf for the message field.
 func (t *testEventRecorder) Eventf(object runtime.Object, eventtype string, reason string, messageFmt string, args ...interface{}) {
-	t.events = append(t.events, testEvent{
+	key := ""
+	if objMeta, err := meta.Accessor(object); err == nil {
+		key = fmt.Sprintf("%s/%s", objMeta.GetNamespace(), objMeta.GetName())
+	}
+	t.events[key] = append(t.events[key], testEvent{
 		object:    object,
 		eventType: eventtype,
 		reason:    reason,
@@ -118,7 +127,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("initializing controller manager failed: %s", err)
 	}
 
-	eventRecorder = &testEventRecorder{events: []testEvent{}}
+	eventRecorder = &testEventRecorder{events: map[string][]testEvent{}}
 
 	err = (&PipelineReconciler{
 		Client:       k8sManager.GetClient(),
