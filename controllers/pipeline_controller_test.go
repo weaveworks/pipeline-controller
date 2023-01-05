@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -29,7 +30,6 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("sets cluster not found condition", func(_ *testing.T) {
-		eventRecorder.Reset()
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -42,16 +42,15 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
 
-		g.Eventually(eventRecorder.Events, time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
+		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
 
-		events := eventRecorder.Events()
+		events := fetchEventsFor(ns.Name, name)()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("SetStatusConditionError"))
 		g.Expect(events[0].message).To(ContainSubstring("GitopsCluster.gitops.weave.works \"wrong-cluster\" not found; requeue"))
 	})
 
 	t.Run("sets reconciliation succeeded condition", func(_ *testing.T) {
-		eventRecorder.Reset()
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -63,16 +62,15 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 
-		g.Eventually(eventRecorder.Events, time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
+		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
 
-		events := eventRecorder.Events()
+		events := fetchEventsFor(ns.Name, name)()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("Updated"))
 		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
 	})
 
 	t.Run("sets reconciliation succeeded condition without clusterRef", func(_ *testing.T) {
-		eventRecorder.Reset()
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -80,9 +78,9 @@ func TestReconcile(t *testing.T) {
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 
-		g.Eventually(eventRecorder.Events, time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
+		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
 
-		events := eventRecorder.Events()
+		events := fetchEventsFor(ns.Name, name)()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("Updated"))
 		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
@@ -149,4 +147,11 @@ func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters
 	g.Expect(k8sClient.Create(ctx, &pipeline)).To(Succeed())
 
 	return &pipeline
+}
+
+func fetchEventsFor(ns string, name string) func() []testEvent {
+	key := fmt.Sprintf("%s/%s", ns, name)
+	return func() []testEvent {
+		return eventRecorder.Events(key)
+	}
 }
