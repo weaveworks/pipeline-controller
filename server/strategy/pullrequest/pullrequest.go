@@ -3,7 +3,6 @@ package pullrequest
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/errors"
 	"github.com/fluxcd/go-git-providers/gitprovider"
 	"os"
 	"time"
@@ -66,7 +65,7 @@ func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Prom
 
 	_, err := gitProviderIsValid(prSpec.Type)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid git provider type")
+		return nil, fmt.Errorf("invalid git provider type: %w", err)
 	}
 
 	if prSpec.Type == "" {
