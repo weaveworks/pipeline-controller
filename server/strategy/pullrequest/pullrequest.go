@@ -173,7 +173,7 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 	userRepoRef.Domain = client.SupportedDomain()
 	userRepo, err := client.UserRepositories().Get(ctx, *userRepoRef)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve repository")
+		return nil, fmt.Errorf("failed to retrieve repository: %w", err)
 	}
 
 	newTitle := fmt.Sprintf("Promote %s/%s in %s to %s",
