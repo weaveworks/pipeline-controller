@@ -2,12 +2,9 @@ package pullrequest
 
 import (
 	"github.com/fluxcd/go-git-providers/gitprovider"
-	github2 "github.com/google/go-github/v47/github"
 	"github.com/onsi/gomega"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
-	"log"
-	"net/url"
 	"testing"
 )
 
@@ -172,27 +169,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				g.Expect(err).To(gomega.BeNil())
 				g.Expect(client.ProviderID()).To(gomega.Equal(tt.expectedProvider))
 				g.Expect(client.SupportedDomain()).To(gomega.Equal(tt.expectedDomain))
-				//assertRawClient(g, client, tt.in)
 			}
 		})
 	}
-}
-
-func assertRawClient(g *gomega.WithT, client gitprovider.Client, gitProviderConfig GitProviderConfig) {
-	var baseUrl *url.URL
-	switch gitProviderConfig.Type {
-	case v1alpha1.Github:
-		g2 := client.Raw().(*github2.Client)
-		baseUrl = g2.BaseURL
-		if gitProviderConfig.Hostname != "" {
-			g.Expect(gitProviderConfig.Hostname).To(gomega.Equal(baseUrl.Hostname()))
-		}
-		break
-	case v1alpha1.Gitlab:
-		//TODO given https://github.com/fluxcd/go-git-providers/issues/176
-		// we cannot add the same assertions for gitlab than github so warning
-		log.Println("[warning] I should have asserted gitlab baseUrl")
-		break
-	}
-
 }
