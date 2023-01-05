@@ -20,4 +20,4 @@ spec:
       type: "gitlab"
       url: "https://gitlab.git.dev.weave.works/pipeline-controller/pipeline-controller-e2e"
       secretRef:
-        name: "gitlab-promotion-credentials"
+        name: "gitlab-ee-promotion-credentials"

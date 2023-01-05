@@ -47,15 +47,15 @@ func TestPullRequestPromotions(t *testing.T) {
 		currentVersion    string
 		newVersion        string
 	}{
-		//{
-		//	"can promote github",
-		//	"podinfo-github",
-		//	"flux-system",
-		//	"promotion-flux-system-podinfo-github-prod",
-		//	"prod",
-		//	"6.0.0",
-		//	"6.0.1",
-		//},
+		{
+			"can promote github",
+			"podinfo-github",
+			"flux-system",
+			"promotion-flux-system-podinfo-github-prod",
+			"prod",
+			"6.0.0",
+			"6.0.1",
+		},
 		//TODO enable me when https://github.com/weaveworks/pipeline-controller/issues/132 is closed
 		{
 			"can promote gitlab",
@@ -90,7 +90,7 @@ func TestPullRequestPromotions(t *testing.T) {
 				//delete git branch
 				err := deleteGitBranchByName(context.Background(), g, k8sClient, pipeline, promotion.branchName)
 				if err != nil {
-					log.Fatalf("could not delete branch %s", err)
+					log.Fatalf("could not delete branch: %s", err.Error())
 				}
 			})
 
@@ -137,13 +137,12 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 		return true
 	}).Should(BeTrue())
 
-	hostname := userRepoRef.Domain
 	tokenString := string(secret.Data["token"])
 	provider := pullrequest.GitProviderConfig{
 		Token:            tokenString,
 		TokenType:        "oauth2",
 		Type:             pullRequestPromotion.Type,
-		Hostname:         hostname,
+		Hostname:         userRepoRef.Domain,
 		DestructiveCalls: false,
 	}
 
@@ -151,6 +150,8 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 	if err != nil {
 		return fmt.Errorf("could not create git provider client: %w", err)
 	}
+	//TODO i should not be needed - gitlab ggp issue
+	userRepoRef.Domain = gitProviderClient.SupportedDomain()
 	userRepo, err := gitProviderClient.UserRepositories().Get(ctx, *userRepoRef)
 	if err != nil {
 		return fmt.Errorf("could not get repository: %w", err)
