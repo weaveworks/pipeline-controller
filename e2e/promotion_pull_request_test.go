@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/cockroachdb/errors"
 	"github.com/fluxcd/go-git-providers/gitprovider"
 	"github.com/fluxcd/helm-controller/api/v2beta1"
 	"github.com/google/go-github/v47/github"
@@ -127,7 +126,7 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 	secretName := pullRequestPromotion.SecretRef.Name
 	userRepoRef, err := gitprovider.ParseUserRepositoryURL(pullRequestPromotion.URL)
 	if err != nil {
-		return errors.Wrap(err, "could not parse git url ")
+		return fmt.Errorf("could not parse git url: %w", err)
 	}
 	g.Eventually(func() bool {
 		//get secret
@@ -150,11 +149,11 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 
 	gitProviderClient, err := pullrequest.NewGitProviderClientFactory()(provider)
 	if err != nil {
-		return errors.Wrap(err, "could not create git provider client")
+		return fmt.Errorf("could not create git provider client: %w", err)
 	}
 	userRepo, err := gitProviderClient.UserRepositories().Get(ctx, *userRepoRef)
 	if err != nil {
-		return errors.Wrap(err, "could not get repository")
+		return fmt.Errorf("could not get repository: %w", err)
 	}
 	clientRaw := gitProviderClient.Raw()
 	//TODO contribute me to ggp
@@ -164,13 +163,13 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 		gClient := clientRaw.(*github.Client)
 		generatedUuid, err := uuid.GenerateUUID()
 		if err != nil {
-			return errors.Wrap(err, "could not generate uuid")
+			return fmt.Errorf("could not generate uuid: %w", err)
 		}
 		owner := userRepoRef.UserLogin
 		repo := userRepoRef.RepositoryName
 		_, r, err := gClient.Repositories.RenameBranch(ctx, owner, repo, branchName, fmt.Sprintf("%s-%s", branchName, generatedUuid))
 		if err != nil {
-			return errors.Wrap(err, "could not rename branch")
+			return fmt.Errorf("could not rename branch: %w", err)
 		}
 		log.Println("branch delete response", r)
 	case v1alpha1.Gitlab:
@@ -178,7 +177,7 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 		gClient := clientRaw.(*gitlab2.Client)
 		deletedBranch, err := gClient.Branches.DeleteBranch(gitlabProject.ID, branchName, nil)
 		if err != nil {
-			return errors.Wrap(err, "could not delete gitlab branch")
+			return fmt.Errorf("could not delete gitlab branch: %w", err)
 		}
 		log.Println("branch delete response", deletedBranch)
 	}
@@ -296,7 +295,7 @@ func ensureHelmRelease(g *WithT, pipeline v1alpha1.Pipeline, c client.Client, cu
 		return expectedVersion && conditions.IsReady(helmRelease.Status.Conditions)
 	}).Should(BeTrue())
 	if !helmReleaseFound {
-		return helmRelease, errors.New("helm release not found")
+		return helmRelease, fmt.Errorf("helm release not found")
 	}
 	log.Println("helm release found")
 	return helmRelease, nil
@@ -314,7 +313,7 @@ func ensurePipeline(g *WithT, c client.Client, pipelineNamespace string, pipelin
 		return conditions.IsReady(pipeline.Status.Conditions)
 	}).Should(BeTrue())
 	if !foundPipeline {
-		return pipeline, errors.New("pipeline not found")
+		return pipeline, fmt.Errorf("pipeline not found")
 	}
 	log.Println("pipeline found")
 	return pipeline, nil
