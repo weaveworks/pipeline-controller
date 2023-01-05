@@ -219,7 +219,6 @@ e2e-setup: docker-build kind flux deploy
 kind:
 	kind create cluster --name=pipeline-controller || kubectx kind-pipeline-controller
 	kind load docker-image --name=pipeline-controller $(IMG) || true
-	kind load docker-image --name=pipeline-controller ghcr.io/fluxcd/notification-controller:v0.30.2 ghcr.io/fluxcd/source-controller:v0.33.0 ghcr.io/fluxcd/helm-controller:v0.28.1 ghcr.io/fluxcd/kustomize-controller:v0.32.0
 
 flux:
 	flux install

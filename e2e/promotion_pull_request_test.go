@@ -56,7 +56,6 @@ func TestPullRequestPromotions(t *testing.T) {
 			"6.0.0",
 			"6.0.1",
 		},
-		//TODO enable me when https://github.com/weaveworks/pipeline-controller/issues/132 is closed
 		{
 			"can promote gitlab",
 			"podinfo-gitlab",
