@@ -17,6 +17,9 @@ by Go to download dependencies from private repositories (replace `USERNAME` wit
 
 ## Running Tests
 
+The project has unit, integration and end-to-end testing. For all of them we are using `go test` for all test types
+(including e2e) due to its simplicity.
+
 ### Unit Testing
 
 This project has unit tests
@@ -25,7 +28,8 @@ This project has unit tests
 make test
 ```
 
-Testing on this controller follows closely what is done by default in `kubebuilder` although we ditched the use of `Gomega` in favor of native Go testing structure. As an example on how to write tests for this controller you can take a look at Kubebuilder [docs](https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html#writing-controller-tests) for reference.
+Testing on this controller follows closely what is done by default in `kubebuilder` although we ditched the use of `Gomega` in favor of native Go testing structure. 
+As an example on how to write tests for this controller you can take a look at Kubebuilder [docs](https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html#writing-controller-tests) for reference.
 
 ### Integration Testing
 
@@ -53,8 +57,66 @@ where you would need to add the build tag `integration`
 
 ```go
 //go:build integration
-
 ```
+
+### End-to-End testing 
+
+This project has a test suite for end to end pipeline controller journeys. You could find them
+within [e2e folder](./e2e). 
+
+#### Configuration
+
+A set of [test pipelines](/e2e/testdata/pipelines) exists to run the tests. They depend on a set 
+of common resources.
+
+A set of git repos are required to hold the manifests to use during pull request promotion strategy.
+
+- [github repo](https://github.com/weaveworks/pipeline-controller-e2e)
+- [gitlab repo](https://gitlab.git.dev.weave.works/pipeline-controller/pipeline-controller-e2e)
+
+A [set of credentials](https://docs.gitops.weave.works/docs/pipelines/promoting-applications/#create-credentials-secret) 
+per git provider needs to exist.
+
+```yaml
+apiVersion: v1
+data:
+  password: <my-github-pat>
+  token: <my-github-pat>
+  username: <my-github-username>
+kind: Secret
+metadata:
+  name: github-promotion-credentials
+  namespace: flux-system
+type: Opaque
+---
+apiVersion: v1
+data:
+  password: <my-gitlab-pat>
+  token: <my-gitlab-pat>
+  username: <my-gitlab-username>
+kind: Secret
+metadata:
+  name: gitlab-promotion-credentials
+  namespace: flux-system
+type: Opaque
+```
+#### Running the tests
+
+Execute `make e2e` to exercise the test.  
+
+In order to interact with them the following targets exists in [Makefile](./Makefile):
+
+- `e2e-setup`: provisions a local environment with kind, flux and pipeline controller to run the tests.
+- `e2e-test`: runs the tests against the running environment.
+- `e2e-clean`: tears down the created environment.
+- `e2e`: single target that executes setup + test + clean targets
+
+One of the concerns with end-to-end testing is that tend to be unstable. A simple script to test how stable
+is the test suite could be used [stability script](/hack/e2e-suite-stability.sh).
+
+#### Adding a test
+
+Add your test case within the e2e folder. An example is [promotion_pull_request_test.go](e2e/promotion_pull_request_test.go)
 
 ## Working with promotions
 

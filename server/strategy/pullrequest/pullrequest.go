@@ -48,7 +48,7 @@ func New(c client.Client, log logr.Logger, opts ...Opt) (*PullRequest, error) {
 
 func setDefaults(g *PullRequest) {
 	if g.gitClientFactory == nil {
-		g.gitClientFactory = newGitProviderClientFactory()
+		g.gitClientFactory = NewGitProviderClientFactory()
 	}
 }
 
