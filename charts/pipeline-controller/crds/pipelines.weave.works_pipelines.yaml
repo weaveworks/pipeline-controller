@@ -353,8 +353,8 @@ spec:
                 additionalProperties:
                   properties:
                     waitingApproval:
-                      description: WaitingApproval holds the environment name and
-                        revision that's currently waiting approval.
+                      description: WaitingApproval holds the environment revision
+                        that's currently waiting approval.
                       properties:
                         revision:
                           description: Revision waiting approval.

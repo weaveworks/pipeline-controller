@@ -58,6 +58,7 @@ type PipelineSpec struct {
 	Promotion *Promotion `json:"promotion,omitempty"`
 }
 
+// GetPromotion returns the environment promotion if set, otherwise returns the default promotion..
 func (ps PipelineSpec) GetPromotion(env string) *Promotion {
 	for _, e := range ps.Environments {
 		if e.Name == env && e.Promotion != nil {
@@ -143,6 +144,7 @@ type PipelineStatus struct {
 	Environments map[string]*EnvironmentStatus `json:"environments"`
 }
 
+// GetWaitingApproval returns the waiting approval of an environment.
 func (p *PipelineStatus) GetWaitingApproval(env string) WaitingApproval {
 	val, ok := p.Environments[env]
 	if !ok {
@@ -152,6 +154,7 @@ func (p *PipelineStatus) GetWaitingApproval(env string) WaitingApproval {
 	return val.WaitingApproval
 }
 
+// SetWaitingApproval sets the waiting approval of a environment.
 func (p *PipelineStatus) SetWaitingApproval(env, revision string) {
 	waitingApproval := WaitingApproval{
 		Revision: revision,
@@ -160,6 +163,7 @@ func (p *PipelineStatus) SetWaitingApproval(env, revision string) {
 	p.setWaitingApproval(env, waitingApproval)
 }
 
+// ResetWaitingApproval resets the waiting approval of an environment.
 func (p *PipelineStatus) ResetWaitingApproval(env string) {
 	p.setWaitingApproval(env, WaitingApproval{})
 }
@@ -185,7 +189,7 @@ type EnvironmentStatus struct {
 	WaitingApproval WaitingApproval `json:"waitingApproval,omitempty"`
 }
 
-// WaitingApproval holds the environment name and revision that's currently waiting approval.
+// WaitingApproval holds the environment revision that's currently waiting approval.
 type WaitingApproval struct {
 	// Revision waiting approval.
 	Revision string `json:"revision"`
