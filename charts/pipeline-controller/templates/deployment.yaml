@@ -27,7 +27,15 @@ spec:
       containers:
       - args:
         - --leader-elect
+        - --log-encoding={{ .Values.logging.encoding }}
+        - --log-level={{ .Values.logging.level }}
         - --events-addr={{ .Values.controller.manager.eventsAddr }}
+        {{- $promotion := .Values.promotion }}
+        - --promotion-hook-rate-limit={{ $promotion.rateLimit.value }}
+        - --promotion-hook-rate-limit-interval={{ $promotion.rateLimit.interval }}
+        - --promotion-retry-delay={{ $promotion.retry.delay }}
+        - --promotion-retry-max-delay={{ $promotion.retry.maxDelay }}
+        - --promotion-retry-threshold={{ $promotion.retry.threshold }}
         command:
         - /manager
         env:
