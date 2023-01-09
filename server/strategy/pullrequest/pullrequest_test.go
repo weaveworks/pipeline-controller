@@ -263,7 +263,7 @@ func TestPromote(t *testing.T) {
 			v1alpha1.Promotion{
 				PullRequest: &v1alpha1.PullRequestPromotion{
 					Type: "github",
-					URL:  "https://example.org",
+					URL:  "https://idontexists",
 					SecretRef: meta.LocalObjectReference{
 						Name: "repo-credentials",
 					},
@@ -282,7 +282,7 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			nil,
-			"failed to clone repo: failed cloning repository: unable to clone: repository not found: git repository: 'https://example.org'",
+			"failed to clone repo: failed cloning repository: unable to clone 'https://idontexists'",
 			nil,
 		},
 		{
