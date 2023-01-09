@@ -162,7 +162,7 @@ func Test_newGitProviderClientFactory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := testingutils.NewGomegaWithT(t)
-			client, err := newGitProviderClientFactory()(tt.in)
+			client, err := NewGitProviderClientFactory()(tt.in)
 			if tt.errPattern != "" {
 				g.Expect(err).To(gomega.MatchError(gomega.MatchRegexp(tt.errPattern)))
 			} else {

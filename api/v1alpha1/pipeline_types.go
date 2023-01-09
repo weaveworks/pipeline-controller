@@ -81,7 +81,7 @@ type Promotion struct {
 // Strategy defines all the available promotion strategies. All of the fields in here are mutually exclusive, i.e. you can only select one
 // promotion strategy per Pipeline. Failure to do so will result in undefined behaviour.
 type Strategy struct {
-	// PullRequest defines a promotion through a GitHub Pull Request.
+	// PullRequest defines a promotion through a Pull Request.
 	// +optional
 	PullRequest *PullRequestPromotion `json:"pull-request,omitempty"`
 	// Notification defines a promotion where an event is emitted through Flux's notification-controller each time an app is to be promoted.
@@ -118,7 +118,7 @@ type PullRequestPromotion struct {
 	// +optional
 	Branch string `json:"branch"`
 	// SecretRef specifies the Secret containing authentication credentials for
-	// the git repository and for the GitHub API.
+	// the git repository and for the git provider API.
 	// For HTTPS repositories the Secret must contain 'username' and 'password'
 	// fields.
 	// For SSH repositories the Secret must contain 'identity'

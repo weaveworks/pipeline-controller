@@ -92,7 +92,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: integration-test
 integration-test:
-	go test -tags integration -v ./...
+	go test -tags integration -cover -v ./...
 
 .PHONY: lint-and-install-chart
 lint-and-install-chart:
@@ -207,3 +207,26 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 helm: $(HELM)
 $(HELM): $(LOCALBIN)
 	test -s $(LOCALBIN)/helm || { curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=$(LOCALBIN) bash -s -- --no-sudo --version $(HELM_VERSION); }
+
+.PHONY: e2e
+e2e: e2e-setup e2e-test e2e-clean
+
+.PHONY: e2e-setup
+e2e-setup: docker-build kind flux deploy
+	kubectl wait -n pipeline-system deployment/pipeline-controller --for=condition=available
+	kubectl apply -f e2e/testdata --recursive
+
+kind:
+	kind create cluster --name=pipeline-controller || kubectx kind-pipeline-controller
+	kind load docker-image --name=pipeline-controller $(IMG)
+
+flux:
+	flux install
+
+.PHONY: e2e-test
+e2e-test:
+	go test -tags e2e -count=1 -v ./e2e
+
+.PHONY: e2e-clean
+e2e-clean:
+	kind delete cluster --name=pipeline-controller

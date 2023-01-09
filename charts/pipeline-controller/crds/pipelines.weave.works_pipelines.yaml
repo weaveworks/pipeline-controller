@@ -96,7 +96,7 @@ spec:
                               type: object
                             pull-request:
                               description: PullRequest defines a promotion through
-                                a GitHub Pull Request.
+                                a Pull Request.
                               properties:
                                 branch:
                                   description: 'The branch to checkout after cloning.
@@ -109,7 +109,7 @@ spec:
                                 secretRef:
                                   description: SecretRef specifies the Secret containing
                                     authentication credentials for the git repository
-                                    and for the GitHub API. For HTTPS repositories
+                                    and for the git provider API. For HTTPS repositories
                                     the Secret must contain 'username' and 'password'
                                     fields. For SSH repositories the Secret must contain
                                     'identity' and 'known_hosts' fields. For Git Provider
@@ -216,8 +216,8 @@ spec:
                           an app is to be promoted.
                         type: object
                       pull-request:
-                        description: PullRequest defines a promotion through a GitHub
-                          Pull Request.
+                        description: PullRequest defines a promotion through a Pull
+                          Request.
                         properties:
                           branch:
                             description: 'The branch to checkout after cloning. Note:
@@ -229,10 +229,10 @@ spec:
                           secretRef:
                             description: SecretRef specifies the Secret containing
                               authentication credentials for the git repository and
-                              for the GitHub API. For HTTPS repositories the Secret
-                              must contain 'username' and 'password' fields. For SSH
-                              repositories the Secret must contain 'identity' and
-                              'known_hosts' fields. For Git Provider API to manage
+                              for the git provider API. For HTTPS repositories the
+                              Secret must contain 'username' and 'password' fields.
+                              For SSH repositories the Secret must contain 'identity'
+                              and 'known_hosts' fields. For Git Provider API to manage
                               pull requests, it must contain a 'token' field.
                             properties:
                               name:

@@ -11,7 +11,6 @@ replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 
 replace golang.org/x/text v0.3.7 => golang.org/x/text v0.3.8
 
 require (
-	github.com/cockroachdb/errors v1.9.0
 	github.com/fluxcd/go-git-providers v0.11.0
 	github.com/fluxcd/helm-controller/api v0.25.0
 	github.com/fluxcd/image-automation-controller v0.26.0
@@ -25,11 +24,14 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.2
 	github.com/golang/mock v1.6.0
+	github.com/google/go-github/v47 v47.1.0
+	github.com/hashicorp/go-uuid v1.0.3
 	github.com/onsi/gomega v1.22.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
 	github.com/weaveworks/cluster-controller v1.3.0
 	github.com/weaveworks/pipeline-controller/api v0.0.0
+	github.com/xanzy/go-gitlab v0.74.0
 	k8s.io/api v0.25.2
 	k8s.io/apimachinery v0.25.2
 	k8s.io/client-go v0.25.2
@@ -54,8 +56,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/cloudflare/circl v1.1.0 // indirect
-	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f // indirect
-	github.com/cockroachdb/redact v1.1.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
@@ -71,7 +71,6 @@ require (
 	github.com/fluxcd/pkg/ssh v0.6.0 // indirect
 	github.com/fluxcd/pkg/version v0.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
-	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/go-logr/zapr v1.2.3 // indirect
@@ -86,7 +85,6 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/go-containerregistry v0.11.0 // indirect
-	github.com/google/go-github/v47 v47.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -99,9 +97,9 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
+	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -118,7 +116,6 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
-	github.com/xanzy/go-gitlab v0.74.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.1 // indirect
 	github.com/xlab/treeprint v1.1.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
