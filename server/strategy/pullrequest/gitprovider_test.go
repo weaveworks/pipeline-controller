@@ -132,7 +132,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				Domain:    "github.myenterprise.com",
 			},
 			"github",
-			"https://github.myenterprise.com",
+			"github.myenterprise.com",
 			"",
 		},
 		{
