@@ -176,13 +176,14 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 
 	newTitle := fmt.Sprintf("Promote %s/%s in %s to %s",
 		promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name, promotion.Version)
-	pr, err := userRepo.PullRequests().Create(
-		ctx,
-		newTitle,
-		head,
-		"main",
-		"")
+	prDesc := fmt.Sprintf(`<details>
+<summary>metadata</summary>
+!!! DO NOT EDIT !!!
 
+%s/%s/%s/%s
+</details>`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name, promotion.Version)
+
+	pr, err := userRepo.PullRequests().Create(ctx, newTitle, head, "main", prDesc)
 	if err != nil {
 		prList, err := userRepo.PullRequests().List(ctx)
 		if err != nil {
