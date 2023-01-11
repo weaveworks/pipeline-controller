@@ -149,7 +149,7 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 	if err != nil {
 		return fmt.Errorf("could not create git provider client: %w", err)
 	}
-	//TODO i should not be needed - gitlab ggp issue
+	//TODO it should not be needed - gitlab ggp issue
 	userRepoRef.Domain = gitProviderClient.SupportedDomain()
 	userRepo, err := gitProviderClient.UserRepositories().Get(ctx, *userRepoRef)
 	if err != nil {
