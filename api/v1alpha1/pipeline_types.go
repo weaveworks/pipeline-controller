@@ -58,10 +58,30 @@ type PipelineSpec struct {
 	Promotion *Promotion `json:"promotion,omitempty"`
 }
 
-// Promotion defines all the available promotion strategies. All of the fields in here are mutually exclusive, i.e. you can only select one
-// promotion strategy per Pipeline. Failure to do so will result in undefined behaviour.
+// GetPromotion returns the environment promotion if set, otherwise returns the default promotion..
+func (ps PipelineSpec) GetPromotion(env string) *Promotion {
+	for _, e := range ps.Environments {
+		if e.Name == env && e.Promotion != nil {
+			return e.Promotion
+		}
+	}
+
+	return ps.Promotion
+}
+
+// Promotion define promotion configuration for the pipeline.
 type Promotion struct {
-	// PullRequest defines a promotion through a pull request
+	// Manual option to allow promotion between to require manual approval before proceeding.
+	// +optional
+	Manual bool `json:"manual,omitempty"`
+	// Strategy defines which strategy the promotion should use.
+	Strategy Strategy `json:"strategy"`
+}
+
+// Strategy defines all the available promotion strategies. All of the fields in here are mutually exclusive, i.e. you can only select one
+// promotion strategy per Pipeline. Failure to do so will result in undefined behaviour.
+type Strategy struct {
+	// PullRequest defines a promotion through a Pull Request.
 	// +optional
 	PullRequest *PullRequestPromotion `json:"pull-request,omitempty"`
 	// Notification defines a promotion where an event is emitted through Flux's notification-controller each time an app is to be promoted.
@@ -118,6 +138,61 @@ type PipelineStatus struct {
 	// Conditions holds the conditions for the Pipeline.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Environments holds environment statuses.
+	// +optional
+	Environments map[string]*EnvironmentStatus `json:"environments"`
+}
+
+// GetWaitingApproval returns the waiting approval of an environment.
+func (p *PipelineStatus) GetWaitingApproval(env string) WaitingApproval {
+	val, ok := p.Environments[env]
+	if !ok {
+		return WaitingApproval{}
+	}
+
+	return val.WaitingApproval
+}
+
+// SetWaitingApproval sets the waiting approval of a environment.
+func (p *PipelineStatus) SetWaitingApproval(env, revision string) {
+	waitingApproval := WaitingApproval{
+		Revision: revision,
+	}
+
+	p.setWaitingApproval(env, waitingApproval)
+}
+
+// ResetWaitingApproval resets the waiting approval of an environment.
+func (p *PipelineStatus) ResetWaitingApproval(env string) {
+	p.setWaitingApproval(env, WaitingApproval{})
+}
+
+func (p *PipelineStatus) setWaitingApproval(env string, waitingApproval WaitingApproval) {
+	if p.Environments == nil {
+		p.Environments = make(map[string]*EnvironmentStatus)
+	}
+
+	val, ok := p.Environments[env]
+	if !ok {
+		p.Environments[env] = &EnvironmentStatus{
+			WaitingApproval: waitingApproval,
+		}
+
+		return
+	}
+
+	val.WaitingApproval = waitingApproval
+}
+
+type EnvironmentStatus struct {
+	WaitingApproval WaitingApproval `json:"waitingApproval,omitempty"`
+}
+
+// WaitingApproval holds the environment revision that's currently waiting approval.
+type WaitingApproval struct {
+	// Revision waiting approval.
+	Revision string `json:"revision"`
 }
 
 type Environment struct {
@@ -128,6 +203,10 @@ type Environment struct {
 	// at least one target.
 	// +required
 	Targets []Target `json:"targets"`
+
+	// Promotion defines details about how the promotion is done on this environment.
+	// +optional
+	Promotion *Promotion `json:"promotion,omitempty"`
 }
 
 type Target struct {
