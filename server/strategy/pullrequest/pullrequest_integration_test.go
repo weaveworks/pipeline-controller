@@ -192,7 +192,7 @@ spec:
 				t.Fatalf("unable to create pullrequest promotion strategy: %s", err)
 			}
 
-			gitClient, _ := NewGitProviderClientFactory()(tt.config.gitProviderConfig)
+			gitClient, _ := NewGitProviderClientFactory(logger.NewLogger(logger.Options{}))(tt.config.gitProviderConfig)
 
 			require.Nil(t, err)
 
@@ -260,7 +260,7 @@ func gitProviderConfig(t *testing.T, gitProviderType v1alpha1.GitProviderType, u
 			Type:             gitProviderType,
 			TokenType:        "oauth2",
 			DestructiveCalls: true,
-			Hostname:         hostname,
+			Domain:           hostname,
 		},
 	}
 }

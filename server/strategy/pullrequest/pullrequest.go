@@ -47,7 +47,7 @@ func New(c client.Client, log logr.Logger, opts ...Opt) (*PullRequest, error) {
 
 func setDefaults(g *PullRequest) {
 	if g.gitClientFactory == nil {
-		g.gitClientFactory = NewGitProviderClientFactory()
+		g.gitClientFactory = NewGitProviderClientFactory(g.log)
 	}
 }
 
@@ -159,7 +159,7 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 		Token:            token,
 		TokenType:        "oauth2",
 		Type:             gitProviderType,
-		Hostname:         userRepoRef.Domain,
+		Domain:           userRepoRef.Domain,
 		DestructiveCalls: false,
 	}
 

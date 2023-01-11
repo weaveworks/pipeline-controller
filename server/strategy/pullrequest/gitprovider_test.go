@@ -2,6 +2,7 @@ package pullrequest
 
 import (
 	"github.com/fluxcd/go-git-providers/gitprovider"
+	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/onsi/gomega"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
@@ -128,7 +129,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				Type:      v1alpha1.Github,
 				TokenType: "oauth2",
 				Token:     "asdf",
-				Hostname:  "github.myenterprise.com",
+				Domain:    "github.myenterprise.com",
 			},
 			"github",
 			"https://github.myenterprise.com",
@@ -151,7 +152,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				Type:      v1alpha1.Gitlab,
 				TokenType: "oauth2",
 				Token:     "abc",
-				Hostname:  "gitlab.myenterprise.com",
+				Domain:    "gitlab.myenterprise.com",
 			},
 			"gitlab",
 			"https://gitlab.myenterprise.com", //TODO: change me when fixed https://github.com/fluxcd/go-git-providers/issues/175
@@ -162,7 +163,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := testingutils.NewGomegaWithT(t)
-			client, err := NewGitProviderClientFactory()(tt.in)
+			client, err := NewGitProviderClientFactory(logger.NewLogger(logger.Options{}))(tt.in)
 			if tt.errPattern != "" {
 				g.Expect(err).To(gomega.MatchError(gomega.MatchRegexp(tt.errPattern)))
 			} else {
@@ -172,4 +173,72 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_decorateCustomDomainByType(t *testing.T) {
+
+	tests := []struct {
+		name            string
+		gitProviderType v1alpha1.GitProviderType
+		domain          string
+		expectedDomain  string
+		errPattern      string
+	}{
+		{
+			"cannot decorate if empty git provider",
+			"",
+			"",
+			"",
+			ErrGitProviderTypeEmpty.Error(),
+		},
+		{
+			"cannot decorate if empty domain",
+			v1alpha1.Github,
+			"",
+			"",
+			ErrGitProviderDomainIsEmpty.Error(),
+		},
+		{
+			"decorate non-gitlab enterprise domain has no effect",
+			v1alpha1.Github,
+			"github.myenterprise.com",
+			"github.myenterprise.com",
+			"",
+		},
+		{
+			"decorate gitlab enterprise domain adds https scheme",
+			v1alpha1.Gitlab,
+			"gitlab.git.dev.weave.works",
+			"https://gitlab.git.dev.weave.works",
+			"",
+		},
+		{
+			"decorate gitlab enterprise with https scheme does not change",
+			v1alpha1.Gitlab,
+			"https://gitlab.git.dev.weave.works",
+			"https://gitlab.git.dev.weave.works",
+			"",
+		},
+		{
+			"decorate gitlab enterprise with http scheme does not change",
+			v1alpha1.Gitlab,
+			"http://gitlab.git.dev.weave.works",
+			"http://gitlab.git.dev.weave.works",
+			"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := testingutils.NewGomegaWithT(t)
+			domain, err := decorateCustomDomainByType(tt.gitProviderType, tt.domain)
+			if tt.errPattern != "" {
+				g.Expect(err).To(gomega.MatchError(gomega.MatchRegexp(tt.errPattern)))
+			} else {
+				g.Expect(domain).To(gomega.Equal(tt.expectedDomain))
+				g.Expect(err).To(gomega.BeNil())
+			}
+		})
+	}
+
 }
