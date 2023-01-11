@@ -13,6 +13,13 @@ controller:
   replicas: 1
 kubernetesClusterDomain: cluster.local
 promotion:
+  rateLimit:
+    value: 20
+    interval: 30
+  retry:
+    delay: 2
+    maxDelay: 20
+    threshold: 3
   service:
     enabled: true
     type: ClusterIP
@@ -34,3 +41,6 @@ promotion:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+logging:
+  encoding: json
+  level: info

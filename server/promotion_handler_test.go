@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
@@ -122,9 +123,11 @@ func createTestPipeline(g *WithT, t *testing.T) v1alpha1.Pipeline {
 func createTestPipelineWithPromotion(g *WithT, t *testing.T) v1alpha1.Pipeline {
 	p := buildTestPipeline()
 	p.Spec.Promotion = &v1alpha1.Promotion{
-		PullRequest: &v1alpha1.PullRequestPromotion{
-			URL:  "foobar",
-			Type: "github",
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				URL:  "foobar",
+				Type: "github",
+			},
 		},
 	}
 	return createPipeline(g, t, p)
@@ -166,21 +169,21 @@ func testRetryOpts() server.RetryOpts {
 	}
 }
 
-func TestGet(t *testing.T) {
+func TestPromotionGet(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.DefaultPromotionHandler{}
 	resp := requestTo(g, h, http.MethodGet, "/", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusMethodNotAllowed))
 }
 
-func TestPostWithWrongPath(t *testing.T) {
+func TestPromotionPostWithWrongPath(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, nil, testRetryOpts())
 	resp := requestTo(g, h, http.MethodPost, "/", nil, nil)
 	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
 
-func TestPostWithNoBody(t *testing.T) {
+func TestPromotionPostWithNoBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient, testRetryOpts())
 	createTestPipeline(g, t)
@@ -188,7 +191,7 @@ func TestPostWithNoBody(t *testing.T) {
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 
-func TestPostWithIncompatibleBody(t *testing.T) {
+func TestPromotionPostWithIncompatibleBody(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{}), nil, k8sClient, testRetryOpts())
 	createTestPipeline(g, t)
@@ -196,20 +199,20 @@ func TestPostWithIncompatibleBody(t *testing.T) {
 	g.Expect(resp.Code).To(Equal(http.StatusBadRequest))
 }
 
-func TestPostWithUnknownPipeline(t *testing.T) {
+func TestPromotionPostWithUnknownPipeline(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), nil, k8sClient, testRetryOpts())
 	resp := requestTo(g, h, http.MethodPost, "/ns/app/env", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusNotFound))
 }
 
-func TestVerifyXSignature(t *testing.T) {
+func TestPromotionVerifyXSignature(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 
 	pipeline := createTestPipelineWithPromotion(g, t)
 	secret := createHmacSecret(g, t, pipeline)
 
-	pipeline.Spec.Promotion.SecretRef = &meta.LocalObjectReference{
+	pipeline.Spec.Promotion.Strategy.SecretRef = &meta.LocalObjectReference{
 		Name: secret.Name,
 	}
 	g.Expect(k8sClient.Update(context.Background(), &pipeline)).To(Succeed())
@@ -244,7 +247,7 @@ func TestVerifyXSignature(t *testing.T) {
 	})
 }
 
-func TestInvolvedObjectDoesntMatch(t *testing.T) {
+func TestPromotionInvolvedObjectDoesntMatch(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	createTestPipeline(g, t)
 	tests := []struct {
@@ -430,4 +433,30 @@ func TestPromotionWithoutUnknownStrategy(t *testing.T) {
 	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
 	g.Expect(resp.Code).To(Equal(http.StatusInternalServerError))
 	g.Expect(resp.Body.String()).To(Equal("error promoting application, please consult the promotion server's logs"))
+}
+
+func TestPromotionWithManualGate(t *testing.T) {
+	g := testingutils.NewGomegaWithT(t)
+
+	p := buildTestPipeline()
+	p.Spec.Promotion = &v1alpha1.Promotion{
+		Manual: true,
+		Strategy: v1alpha1.Strategy{
+			Notification: &v1alpha1.NotificationPromotion{},
+		},
+	}
+	createPipeline(g, t, p)
+
+	strat := introspectableStrategy{}
+	stratReg := strategy.StrategyRegistry{&strat}
+	h := server.NewDefaultPromotionHandler(logger.NewLogger(logger.Options{LogLevel: "trace"}), stratReg, k8sClient, testRetryOpts())
+
+	resp := requestTo(g, h, http.MethodPost, "/default/app/dev", nil, marshalEvent(g, createEvent()))
+	g.Expect(resp.Code).To(Equal(http.StatusNoContent))
+	g.Expect(resp.Body.String()).To(Equal(""))
+
+	updatedPipeline := &v1alpha1.Pipeline{}
+	g.Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(&p), updatedPipeline)).To(Succeed())
+
+	g.Expect(updatedPipeline.Status.Environments["prod"].WaitingApproval.Revision).To(Equal("5.0.0"))
 }

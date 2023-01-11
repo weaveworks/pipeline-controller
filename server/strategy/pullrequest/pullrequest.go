@@ -3,9 +3,10 @@ package pullrequest
 import (
 	"context"
 	"fmt"
-	"github.com/fluxcd/go-git-providers/gitprovider"
 	"os"
 	"time"
+
+	"github.com/fluxcd/go-git-providers/gitprovider"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/git"
@@ -52,13 +53,13 @@ func setDefaults(g *PullRequest) {
 }
 
 func (g PullRequest) Handles(p pipelinev1alpha1.Promotion) bool {
-	return p.PullRequest != nil
+	return p.Strategy.PullRequest != nil
 }
 
 func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Promotion, promotion strategy.Promotion) (*strategy.PromotionResult, error) {
 	log := g.log.WithValues("promotion", promotion)
 
-	prSpec := promSpec.PullRequest
+	prSpec := promSpec.Strategy.PullRequest
 	if prSpec == nil {
 		return nil, ErrSpecIsNil
 	}

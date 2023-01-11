@@ -33,7 +33,7 @@ func NewNotification(kubeClient client.Client, eventRecorder kuberecorder.EventR
 }
 
 func (g Notification) Handles(p pipelinev1alpha1.Promotion) bool {
-	return p.Notification != nil
+	return p.Strategy.Notification != nil
 }
 
 func (g Notification) Promote(ctx context.Context, promSpec pipelinev1alpha1.Promotion, promotion strategy.Promotion) (*strategy.PromotionResult, error) {

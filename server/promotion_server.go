@@ -30,15 +30,17 @@ const (
 )
 
 type PromotionServer struct {
-	log              logr.Logger
-	c                client.Client
-	addr             string
-	listener         net.Listener
-	promHandler      http.Handler
-	promEndpointName string
-	stratReg         strategy.StrategyRegistry
-	rateLimit        rateLimit
-	retry            RetryOpts
+	log                  logr.Logger
+	c                    client.Client
+	addr                 string
+	listener             net.Listener
+	promHandler          http.Handler
+	promEndpointName     string
+	approvalHandler      http.Handler
+	approvalEndpointName string
+	stratReg             strategy.StrategyRegistry
+	rateLimit            rateLimit
+	retry                RetryOpts
 }
 
 type rateLimit struct {
@@ -58,6 +60,7 @@ var (
 	ErrClientCantBeNil       = fmt.Errorf("client can't be nil")
 	DefaultListenAddr        = "127.0.0.1:8080"
 	DefaultPromotionEndpoint = "/promotion"
+	DefaultApprovalEndpoint  = "/approval"
 )
 
 func NewPromotionServer(c client.Client, opts ...Opt) (*PromotionServer, error) {
@@ -118,6 +121,17 @@ func setDefaults(s *PromotionServer) {
 	if s.promEndpointName == "" {
 		s.promEndpointName = DefaultPromotionEndpoint
 	}
+
+	if s.approvalHandler == nil {
+		s.approvalHandler = NewDefaultApprovalHandler(
+			s.log.WithName("handler"),
+			s.stratReg,
+			s.c,
+		)
+	}
+	if s.approvalEndpointName == "" {
+		s.approvalEndpointName = DefaultApprovalEndpoint
+	}
 }
 
 func getRealIP(r *http.Request) string {
@@ -152,7 +166,8 @@ func (s PromotionServer) rateLimitMiddleware(limiter *ratelimiter.Limiter, h htt
 }
 
 func (s PromotionServer) Start(ctx context.Context) error {
-	pathPrefix := "/promotion/"
+	promPathPrefix := "/promotion/"
+	approvalPathPrefix := "/approval/"
 
 	limiter := ratelimiter.New(
 		ratelimiter.WithLimit(s.rateLimit.count),
@@ -160,10 +175,16 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	)
 
 	mux := http.NewServeMux()
-	mux.Handle(pathPrefix,
+	mux.Handle(promPathPrefix,
 		s.rateLimitMiddleware(
 			limiter,
 			http.StripPrefix(s.promEndpointName, s.promHandler),
+		),
+	)
+	mux.Handle(approvalPathPrefix,
+		s.rateLimitMiddleware(
+			limiter,
+			http.StripPrefix(s.approvalEndpointName, s.approvalHandler),
 		),
 	)
 	mux.Handle("/healthz", healthz.CheckHandler{Checker: healthz.Ping})
@@ -174,7 +195,7 @@ func (s PromotionServer) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		log := s.log.WithValues("kind", "promotion webhook", "path", pathPrefix, "addr", s.listener.Addr())
+		log := s.log.WithValues("kind", "promotion webhook", "path", promPathPrefix, "addr", s.listener.Addr())
 		log.Info("Starting server")
 		if err := srv.Serve(s.listener); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
