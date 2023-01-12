@@ -16,8 +16,9 @@ spec:
       targets:
         - namespace: prod-gitlab
   promotion:
-    pull-request:
-      type: "gitlab"
-      url: "https://gitlab.git.dev.weave.works/pipeline-controller/pipeline-controller-e2e"
-      secretRef:
-        name: "gitlab-ee-promotion-credentials"
+    strategy:
+      pull-request:
+        type: "gitlab"
+        url: "https://gitlab.git.dev.weave.works/pipeline-controller/pipeline-controller-e2e"
+        secretRef:
+          name: "gitlab-ee-promotion-credentials"

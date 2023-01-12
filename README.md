@@ -13,6 +13,19 @@ The pipeline-controller is a Kubernetes controller offering an API (in terms of 
    make run
    ```
 
+## Create example pipeline
+
+To make it easier to develop on the controller, you can add example pipline
+resources:
+
+```bash
+# Github
+kubectl apply --recursive -f e2e/testdata/pipelines/github/
+
+# Gitlab
+kubectl apply --recursive -f e2e/testdata/pipelines/gitlab/
+```
+
 ## Contributing
 
 Check out [how to contribute](CONTRIBUTING.md) to the project.
