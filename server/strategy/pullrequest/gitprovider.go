@@ -5,15 +5,18 @@ import (
 	"github.com/fluxcd/go-git-providers/github"
 	"github.com/fluxcd/go-git-providers/gitlab"
 	"github.com/fluxcd/go-git-providers/gitprovider"
+	"github.com/go-logr/logr"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"strings"
 )
 
 var (
-	ErrGitProviderTypeEmpty     = fmt.Errorf("git provider type is empty")
-	ErrGitProviderTypeInvalid   = fmt.Errorf("git provider type not supported")
-	ErrGitProviderDomainIsEmpty = fmt.Errorf("git provider host is empty")
-	ErrTokenTypeIsEmpty         = fmt.Errorf("git provider token type is empty")
-	ErrTokenIsEmpty             = fmt.Errorf("git provider token is empty")
+	ErrGitProviderTypeEmpty       = fmt.Errorf("git provider type is empty")
+	ErrGitProviderTypeInvalid     = fmt.Errorf("git provider type not supported")
+	ErrGitProviderDomainIsEmpty   = fmt.Errorf("git provider host is empty")
+	ErrGitProviderDomainIsInvalid = fmt.Errorf("git provider domain is invalid")
+	ErrTokenTypeIsEmpty           = fmt.Errorf("git provider token type is empty")
+	ErrTokenIsEmpty               = fmt.Errorf("git provider token is empty")
 )
 
 type GitProviderClientFactory func(provider GitProviderConfig) (gitprovider.Client, error)
@@ -22,12 +25,12 @@ type GitProviderConfig struct {
 	Token            string
 	TokenType        string
 	Type             v1alpha1.GitProviderType
-	Hostname         string
+	Domain           string
 	DestructiveCalls bool
 }
 
 // same as https://github.com/weaveworks/weave-gitops-enterprise/blob/7ef05e773d7650a83cfa86dbd642253353b584c0/cmd/clusters-service/pkg/git/git.go#L286
-func NewGitProviderClientFactory() GitProviderClientFactory {
+func NewGitProviderClientFactory(log logr.Logger) GitProviderClientFactory {
 	return func(provider GitProviderConfig) (gitprovider.Client, error) {
 		var client gitprovider.Client
 		var err error
@@ -53,12 +56,16 @@ func NewGitProviderClientFactory() GitProviderClientFactory {
 		clientOptions = append(clientOptions, gitprovider.WithOAuth2Token(provider.Token))
 
 		if provider.DestructiveCalls {
-			//TODO bring visibility to this action
+			log.Info("creating client with destructive calls enabled")
 			clientOptions = append(clientOptions, gitprovider.WithDestructiveAPICalls(provider.DestructiveCalls))
 		}
 
-		if provider.Hostname != "" {
-			clientOptions = append(clientOptions, gitprovider.WithDomain(provider.Hostname))
+		if provider.Domain != "" {
+			domain, err := decorateCustomDomainByType(provider.Type, provider.Domain)
+			if err != nil {
+				return nil, err
+			}
+			clientOptions = append(clientOptions, gitprovider.WithDomain(domain))
 		}
 
 		switch provider.Type {
@@ -78,6 +85,29 @@ func NewGitProviderClientFactory() GitProviderClientFactory {
 		return client, err
 	}
 
+}
+
+// TODO review me when https://github.com/fluxcd/go-git-providers/issues/175 and
+// https://github.com/fluxcd/go-git-providers/issues/176 are fixed
+// we need to hack this to add the https scheme to the domain to
+// have a gitlab client with a correct baseurl otherwise would create an invalid url
+func decorateCustomDomainByType(gitProviderType v1alpha1.GitProviderType, domain string) (string, error) {
+	if gitProviderType == "" {
+		return "", ErrGitProviderTypeEmpty
+	}
+
+	if domain == "" {
+		return "", ErrGitProviderDomainIsEmpty
+	}
+
+	switch gitProviderType {
+	case v1alpha1.Gitlab:
+		//if not a url we create one with https by default
+		if !strings.HasPrefix(domain, "http://") && !strings.HasPrefix(domain, "https://") {
+			return fmt.Sprintf("https://%s", domain), nil
+		}
+	}
+	return domain, nil
 }
 
 func gitProviderIsValid(gitProviderType v1alpha1.GitProviderType) (bool, error) {

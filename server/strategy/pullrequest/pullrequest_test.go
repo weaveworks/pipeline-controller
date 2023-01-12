@@ -535,6 +535,7 @@ func TestPromote(t *testing.T) {
 				mockPRClient := NewMockPullRequestClient(mockCtrl)
 				mockRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockRepo, nil)
 				mockGitClient.EXPECT().UserRepositories().Return(mockRepoClient)
+				mockGitClient.EXPECT().SupportedDomain().Return(repoRef.Domain)
 				mockRepo.EXPECT().PullRequests().Return(mockPRClient)
 				mockPR := NewMockPullRequest(mockCtrl)
 				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"github.com/fluxcd/go-git-providers/gitprovider"
 	"github.com/fluxcd/helm-controller/api/v2beta1"
+	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/go-logr/logr"
 	"github.com/google/go-github/v47/github"
 	"github.com/hashicorp/go-uuid"
 	. "github.com/onsi/gomega"
@@ -37,6 +39,7 @@ const (
 
 func TestPullRequestPromotions(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
+	log := logger.NewLogger(logger.Options{})
 
 	tests := []struct {
 		name              string
@@ -56,16 +59,15 @@ func TestPullRequestPromotions(t *testing.T) {
 			"6.0.0",
 			"6.0.1",
 		},
-		//TODO enable me when https://github.com/weaveworks/pipeline-controller/issues/132 is closed
-		//{
-		//	"can promote gitlab",
-		//	"podinfo-gitlab",
-		//	"flux-system",
-		//	"promotion-flux-system-podinfo-gitlab-prod",
-		//	"prod",
-		//	"6.0.0",
-		//	"6.0.1",
-		//},
+		{
+			"can promote gitlab",
+			"podinfo-gitlab",
+			"flux-system",
+			"promotion-flux-system-podinfo-gitlab-prod",
+			"prod",
+			"6.0.0",
+			"6.0.1",
+		},
 	}
 
 	g.SetDefaultEventuallyTimeout(defaultTimeout)
@@ -82,15 +84,15 @@ func TestPullRequestPromotions(t *testing.T) {
 
 			//cleanup promotion
 			t.Cleanup(func() {
-				log.Println("cleaning test")
+				log.Info("cleaning test")
 				//restore helm release version
 				released := releaseNewVersion(g, k8sClient, helmRelease, promotion.currentVersion)
 				g.Expect(released).To(BeTrue())
 				helmRelease, err = ensureHelmRelease(g, pipeline, k8sClient, promotion.currentVersion)
 				//delete git branch
-				err := deleteGitBranchByName(context.Background(), g, k8sClient, pipeline, promotion.branchName)
+				err := deleteGitBranchByName(context.Background(), g, k8sClient, pipeline, promotion.branchName, log)
 				if err != nil {
-					log.Fatalf("could not delete branch %s", err)
+					log.Error(err, "could not delete branch")
 				}
 			})
 
@@ -110,7 +112,7 @@ func TestPullRequestPromotions(t *testing.T) {
 	deletePodsByNamespaceAndLabel(g, "flux-system", "app=notification-controller")
 }
 
-func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipeline v1alpha1.Pipeline, branchName string) error {
+func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipeline v1alpha1.Pipeline, branchName string, log logr.Logger) error {
 	var secret corev1.Secret
 
 	promotion := pipeline.Spec.Promotion
@@ -131,26 +133,27 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 	g.Eventually(func() bool {
 		//get secret
 		if err := c.Get(ctx, client.ObjectKey{Namespace: pipeline.Namespace, Name: secretName}, &secret); err != nil {
-			log.Printf("failed to fetch Secret: %s", err)
+			log.Error(err, "failed to fetch Secret")
 			return false
 		}
 		return true
 	}).Should(BeTrue())
 
-	hostname := userRepoRef.Domain
 	tokenString := string(secret.Data["token"])
 	provider := pullrequest.GitProviderConfig{
 		Token:            tokenString,
 		TokenType:        "oauth2",
 		Type:             pullRequestPromotion.Type,
-		Hostname:         hostname,
+		Domain:           userRepoRef.Domain,
 		DestructiveCalls: false,
 	}
 
-	gitProviderClient, err := pullrequest.NewGitProviderClientFactory()(provider)
+	gitProviderClient, err := pullrequest.NewGitProviderClientFactory(log)(provider)
 	if err != nil {
 		return fmt.Errorf("could not create git provider client: %w", err)
 	}
+	//TODO it should not be needed - gitlab ggp issue
+	userRepoRef.Domain = gitProviderClient.SupportedDomain()
 	userRepo, err := gitProviderClient.UserRepositories().Get(ctx, *userRepoRef)
 	if err != nil {
 		return fmt.Errorf("could not get repository: %w", err)
@@ -167,19 +170,17 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 		}
 		owner := userRepoRef.UserLogin
 		repo := userRepoRef.RepositoryName
-		_, r, err := gClient.Repositories.RenameBranch(ctx, owner, repo, branchName, fmt.Sprintf("%s-%s", branchName, generatedUuid))
+		_, _, err = gClient.Repositories.RenameBranch(ctx, owner, repo, branchName, fmt.Sprintf("%s-%s", branchName, generatedUuid))
 		if err != nil {
 			return fmt.Errorf("could not rename branch: %w", err)
 		}
-		log.Println("branch delete response", r)
 	case v1alpha1.Gitlab:
 		gitlabProject := userRepo.APIObject().(*gitlab2.Project)
 		gClient := clientRaw.(*gitlab2.Client)
-		deletedBranch, err := gClient.Branches.DeleteBranch(gitlabProject.ID, branchName, nil)
+		_, err := gClient.Branches.DeleteBranch(gitlabProject.ID, branchName, nil)
 		if err != nil {
 			return fmt.Errorf("could not delete gitlab branch: %w", err)
 		}
-		log.Println("branch delete response", deletedBranch)
 	}
 	return nil
 }
