@@ -15,7 +15,7 @@ The pipeline-controller is a Kubernetes controller offering an API (in terms of 
 
 ## Create example pipeline
 
-To make it easier to develop on the controller, you can add example pipline
+To make it easier to develop on the controller, you can add example pipeline
 resources:
 
 ```bash
