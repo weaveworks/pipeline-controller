@@ -16,8 +16,9 @@ spec:
       targets:
         - namespace: prod-github
   promotion:
-    pull-request:
-      type: "github"
-      url: "https://github.com/weaveworks/pipeline-controller-e2e"
-      secretRef:
-        name: "github-promotion-credentials"
+    strategy:
+      pull-request:
+        type: "github"
+        url: "https://github.com/weaveworks/pipeline-controller-e2e"
+        secretRef:
+          name: "github-promotion-credentials"
