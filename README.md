@@ -26,6 +26,15 @@ kubectl apply --recursive -f e2e/testdata/pipelines/github/
 kubectl apply --recursive -f e2e/testdata/pipelines/gitlab/
 ```
 
+## Pipeline Templates
+
+You could manage [gitops templates](https://docs.gitops.weave.works/docs/gitops-templates/templates/) for pipelines. 
+They aim to simplify and enhace the pipeline creation experience. Existing templates for pipelines
+are packaged as helm chart [pipeline-templates](./charts/pipeline-templates) and integrated with [pipeline controller](./charts/pipeline-controller) 
+via feature flag `.values.templates.enabled`.
+
+For guidance using it see [pipeline templates user documentation](https://docs.gitops.weave.works/docs/pipelines/pipeline-templates/).
+
 ## Contributing
 
 Check out [how to contribute](CONTRIBUTING.md) to the project.
