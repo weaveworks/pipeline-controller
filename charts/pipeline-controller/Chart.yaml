@@ -4,3 +4,8 @@ description: Pipeline-controller Helm chart for Weave GitOps Enterprise
 type: application
 version: 0.14.0
 appVersion: "v0.0.28"
+dependencies:
+  - name: pipeline-templates
+    version: "0.1.0"
+    repository: "file://../pipeline-templates"
+    condition: templates.enabled

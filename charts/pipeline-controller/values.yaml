@@ -44,3 +44,5 @@ promotion:
 logging:
   encoding: json
   level: info
+templates:
+  enabled: true

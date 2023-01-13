@@ -1,0 +1,62 @@
+apiVersion: templates.weave.works/v1alpha2
+kind: GitOpsTemplate
+metadata:
+  name: pipeline-sample
+  namespace: default # Namespace where the GitOpsTemplate is installed, consider that a team will need READ access to this namespace and the custom resource
+  labels:
+    weave.works/template-type: pipeline
+spec:
+  description: Sample Pipeline showing visualization of two helm releases across two environments.
+  params:
+    - name: RESOURCE_NAME # This is a required parameter name to enable Weave GitOps to write to your Git Repository
+      description: Name of the Pipeline
+    - name: RESOURCE_NAMESPACE
+      description: Namespace for the Pipeline on the management cluster
+      default: flux-system # default values make it easier for users to fill in a template
+    - name: FIRST_CLUSTER_NAME
+      description: Name of GitopsCluster object for the first environment
+    - name: FIRST_CLUSTER_NAMESPACE
+      description: Namespace where this object exists
+      default: default
+    - name: FIRST_APPLICATION_NAME
+      description: Name of the HelmRelease for your application in the first environment
+    - name: FIRST_APPLICATION_NAMESPACE
+      description: Namespace for this application
+      default: flux-system
+    - name: SECOND_CLUSTER_NAME
+      description: Name of GitopsCluster object for the second environment
+    - name: SECOND_CLUSTER_NAMESPACE
+      description: Namespace where this object exists
+      default: default
+    - name: SECOND_APPLICATION_NAME
+      description: Name of the HelmRelease for your application in the second environment
+    - name: SECOND_APPLICATION_NAMESPACE
+      description: Namespace for this application
+      default: flux-system
+  resourcetemplates:
+    - content:
+        - apiVersion: pipelines.weave.works/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: ${RESOURCE_NAME}
+            namespace: ${RESOURCE_NAMESPACE}
+          spec:
+            appRef:
+              apiVersion: helm.toolkit.fluxcd.io/v2beta1
+              kind: HelmRelease
+              name: ${APPLICATION_NAME}
+            environments:
+              - name: First-Environment
+                targets:
+                  - namespace: ${FIRST_APPLICATION_NAMESPACE}
+                    clusterRef:
+                      kind: GitopsCluster
+                      name: ${FIRST_CLUSTER_NAME}
+                      namespace: ${FIRST_CLUSTER_NAMESPACE}
+              - name: Second-Environment
+                targets:
+                  - namespace: ${SECOND_APPLICATION_NAMESPACE}
+                    clusterRef:
+                      kind: GitopsCluster
+                      name: ${SECOND_CLUSTER_NAME}
+                      namespace: ${SECOND_CLUSTER_NAMESPACE}
