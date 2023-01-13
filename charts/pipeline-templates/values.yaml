@@ -1,0 +1,2 @@
+# Namespace where the GitOpsTemplate is installed, consider that a team will need READ access to this namespace and the custom resource
+namespace: default
