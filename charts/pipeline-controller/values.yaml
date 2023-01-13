@@ -45,4 +45,4 @@ logging:
   encoding: json
   level: info
 templates:
-  enabled: false # set to false by default until we dont have th
+  enabled: false  # set to false by default until we dont have a template to distribute
