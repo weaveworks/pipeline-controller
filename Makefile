@@ -96,6 +96,7 @@ integration-test:
 
 .PHONY: lint-and-install-chart
 lint-and-install-chart:
+	kubectl apply -f ./config/testdata/crds/gitopstemplate.yaml
 	ct lint-and-install --config ct.yaml --target-branch main
 
 .PHONY: lint-chart
