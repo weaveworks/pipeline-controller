@@ -73,7 +73,7 @@ jobs:
       - name: Update pipeline-controller chart version
         uses: mikefarah/yq@v4.30.4
         with:
-          cmd: yq -i '.dependencies[3].version = "${{ github.event.registry_package.package_version.container_metadata.tag.name }}"' charts/mccp/Chart.yaml
+          cmd: yq -i '(.dependencies[] | select(.name=="pipeline-controller") | .version) |= "${{ github.event.registry_package.package_version.container_metadata.tag.name }}"' charts/mccp/Chart.yaml
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
