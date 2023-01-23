@@ -180,8 +180,8 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 <summary>metadata</summary>
 !!! DO NOT EDIT !!!
 
-%s/%s/%s/%s
-</details>`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name, promotion.Version)
+%s/%s/%s
+</details>`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
 
 	pr, err := userRepo.PullRequests().Create(ctx, newTitle, head, "main", prDesc)
 	if err != nil {
