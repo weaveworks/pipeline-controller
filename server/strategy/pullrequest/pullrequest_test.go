@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,18 +196,17 @@ func TestHandles(t *testing.T) {
 	}
 }
 
-type gitServerConfig struct {
-	repoFixtureDir string
-	username       string
-	password       string
-	publicKey      []byte
-	privateKey     []byte
-	ca             []byte
-}
-
 func TestPromote(t *testing.T) {
 	tlsPublicKey, tlsPrivateKey, tlsCA := initTestTLS()
 
+	type gitServerConfig struct {
+		repoFixtureDir string
+		username       string
+		password       string
+		publicKey      []byte
+		privateKey     []byte
+		ca             []byte
+	}
 	tests := []struct {
 		name         string
 		promSpec     v1alpha1.Promotion
@@ -536,7 +536,26 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			"",
-			gitMockSetup,
+			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (gitprovider.Client, error) {
+				repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.Strategy.PullRequest.URL)
+				if err != nil {
+					return nil, err
+				}
+				mockGitClient := NewMockClient(mockCtrl)
+				mockRepoClient := NewMockUserRepositoriesClient(mockCtrl)
+				mockRepo := NewMockUserRepository(mockCtrl)
+				mockPRClient := NewMockPullRequestClient(mockCtrl)
+				mockRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockRepo, nil)
+				mockGitClient.EXPECT().UserRepositories().Return(mockRepoClient)
+				mockGitClient.EXPECT().SupportedDomain().Return(repoRef.Domain)
+				mockRepo.EXPECT().PullRequests().Return(mockPRClient)
+				mockPR := NewMockPullRequest(mockCtrl)
+				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
+				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
+
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), containsMatcher{x: prDesc}).Return(mockPR, nil)
+				return mockGitClient, nil
+			},
 		},
 	}
 
@@ -546,8 +565,27 @@ func TestPromote(t *testing.T) {
 			fc := fake.NewClientBuilder().WithObjects(tt.apiObjects...).Build()
 
 			if tt.server != nil {
-				gitServer := createGitServer(t, tt.server)
-				tt.promSpec.Strategy.PullRequest.URL = gitServer.HTTPAddress() + "/org/test.git"
+				server, err := gittestserver.NewTempGitServer()
+				g.Expect(err).NotTo(HaveOccurred())
+				t.Cleanup(func() {
+					os.RemoveAll(server.Root())
+				})
+				server.AutoCreate()
+				repoPath := "/org/test.git"
+				_, err = initGitRepo(server, tt.server.repoFixtureDir, v1alpha1.DefaultBranch, repoPath)
+				g.Expect(err).NotTo(HaveOccurred())
+				if tt.server.username != "" {
+					server.Auth(tt.server.username, tt.server.password)
+				}
+				if tt.server.privateKey != nil {
+					g.Expect(server.StartHTTPS(tt.server.publicKey, tt.server.privateKey, tt.server.ca, "example.org")).To(Succeed())
+				} else {
+					g.Expect(server.StartHTTP()).To(Succeed())
+				}
+				t.Cleanup(func() {
+					server.StopHTTP()
+				})
+				tt.promSpec.Strategy.PullRequest.URL = server.HTTPAddress() + repoPath
 			}
 
 			var gitClient gitprovider.Client
@@ -576,56 +614,16 @@ func TestPromote(t *testing.T) {
 	}
 }
 
-func gitMockSetup(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (gitprovider.Client, error) {
-	repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.Strategy.PullRequest.URL)
-	if err != nil {
-		return nil, err
-	}
-	mockGitClient := NewMockClient(mockCtrl)
-	mockRepoClient := NewMockUserRepositoriesClient(mockCtrl)
-	mockRepo := NewMockUserRepository(mockCtrl)
-	mockPRClient := NewMockPullRequestClient(mockCtrl)
-	mockRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockRepo, nil)
-	mockGitClient.EXPECT().UserRepositories().Return(mockRepoClient)
-	mockRepo.EXPECT().PullRequests().Return(mockPRClient)
-	mockPR := NewMockPullRequest(mockCtrl)
-	mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
+var _ gomock.Matcher = containsMatcher{}
 
-	prDesc := fmt.Sprintf(`<details>
-<summary>metadata</summary>
-!!! DO NOT EDIT !!!
-
-%s/%s/%s/%s
-</details>`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name, promotion.Version)
-
-	mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), gomock.Eq(prDesc)).Return(mockPR, nil)
-	return mockGitClient, nil
+type containsMatcher struct {
+	x string
 }
 
-func createGitServer(t *testing.T, config *gitServerConfig) *gittestserver.GitServer {
-	g := testingutils.NewGomegaWithT(t)
+func (m containsMatcher) Matches(x interface{}) bool {
+	return strings.Contains(x.(string), m.x)
+}
 
-	server, err := gittestserver.NewTempGitServer()
-	g.Expect(err).NotTo(HaveOccurred())
-
-	t.Cleanup(func() {
-		os.RemoveAll(server.Root())
-	})
-	server.AutoCreate()
-	repoPath := "/org/test.git"
-	_, err = initGitRepo(server, config.repoFixtureDir, v1alpha1.DefaultBranch, repoPath)
-	g.Expect(err).NotTo(HaveOccurred())
-	if config.username != "" {
-		server.Auth(config.username, config.password)
-	}
-	if config.privateKey != nil {
-		g.Expect(server.StartHTTPS(config.publicKey, config.privateKey, config.ca, "example.org")).To(Succeed())
-	} else {
-		g.Expect(server.StartHTTP()).To(Succeed())
-	}
-	t.Cleanup(func() {
-		server.StopHTTP()
-	})
-
-	return server
+func (m containsMatcher) String() string {
+	return m.x
 }

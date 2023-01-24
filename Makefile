@@ -109,7 +109,7 @@ helm-chart:
 
 .PHONY: build
 build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	go build -o bin/manager .
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -212,15 +212,13 @@ $(HELM): $(LOCALBIN)
 e2e: e2e-setup e2e-test e2e-clean
 
 .PHONY: e2e-setup
-e2e-setup: docker-build kind flux deploy
+e2e-setup: e2e-kind deploy
 	kubectl wait -n pipeline-system deployment/pipeline-controller --for=condition=available
 	kubectl apply -f e2e/testdata --recursive
 
-kind:
+e2e-kind: docker-build
 	kind create cluster --name=pipeline-controller || kubectx kind-pipeline-controller
 	kind load docker-image --name=pipeline-controller $(IMG)
-
-flux:
 	flux install
 
 .PHONY: e2e-test

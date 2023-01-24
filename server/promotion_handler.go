@@ -70,7 +70,7 @@ func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reque
 
 	var pipeline pipelinev1alpha1.Pipeline
 	if err := h.c.Get(r.Context(), client.ObjectKey{Namespace: promotion.PipelineNamespace, Name: promotion.PipelineName}, &pipeline); err != nil {
-		h.log.V(logger.InfoLevel).Info("could not fetch Pipeline object", "error", err)
+		h.log.V(logger.InfoLevel).Error(err, "could not fetch Pipeline object")
 		if k8serrors.IsNotFound(err) {
 			rw.WriteHeader(http.StatusNotFound)
 			return
