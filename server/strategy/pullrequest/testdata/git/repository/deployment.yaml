@@ -18,7 +18,7 @@ spec:
         app: nginx
     spec:
       containers:
-      - image: nginx:1.22.0 # {"$promotion": "foo:bar:"}
+      - image: nginx:1.22.0 # {"$promotion": "foo:bar:dev"}
         name: nginx
         resources: {}
 status: {}

@@ -4,8 +4,10 @@ package pullrequest_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,7 +215,7 @@ func TestPromote(t *testing.T) {
 		server       *gitServerConfig
 		err          error
 		errPattern   string
-		gitMockSetup func(*gomock.Controller, v1alpha1.Promotion) (gitprovider.Client, error)
+		gitMockSetup func(*gomock.Controller, v1alpha1.Promotion, strategy.Promotion) (gitprovider.Client, error)
 	}{
 		{
 			"nil PullRequest spec",
@@ -318,6 +320,9 @@ func TestPromote(t *testing.T) {
 			strategy.Promotion{
 				PipelineNamespace: "foo",
 				PipelineName:      "bar",
+				Environment: v1alpha1.Environment{
+					Name: "dev",
+				},
 			},
 			[]client.Object{
 				&corev1.Secret{
@@ -384,6 +389,9 @@ func TestPromote(t *testing.T) {
 			strategy.Promotion{
 				PipelineNamespace: "foo",
 				PipelineName:      "bar",
+				Environment: v1alpha1.Environment{
+					Name: "dev",
+				},
 			},
 			[]client.Object{
 				&corev1.Secret{
@@ -499,6 +507,10 @@ func TestPromote(t *testing.T) {
 			strategy.Promotion{
 				PipelineNamespace: "foo",
 				PipelineName:      "bar",
+				Version:           "1.2.3",
+				Environment: v1alpha1.Environment{
+					Name: "dev",
+				},
 			},
 			[]client.Object{
 				&corev1.Secret{
@@ -524,7 +536,7 @@ func TestPromote(t *testing.T) {
 			},
 			nil,
 			"",
-			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion) (gitprovider.Client, error) {
+			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (gitprovider.Client, error) {
 				repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.Strategy.PullRequest.URL)
 				if err != nil {
 					return nil, err
@@ -539,7 +551,9 @@ func TestPromote(t *testing.T) {
 				mockRepo.EXPECT().PullRequests().Return(mockPRClient)
 				mockPR := NewMockPullRequest(mockCtrl)
 				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
-				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), gomock.Any()).Return(mockPR, nil)
+				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
+
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), containsMatcher{x: prDesc}).Return(mockPR, nil)
 				return mockGitClient, nil
 			},
 		},
@@ -578,7 +592,7 @@ func TestPromote(t *testing.T) {
 			if tt.gitMockSetup != nil {
 				mockCtrl := gomock.NewController(t)
 				var err error
-				gitClient, err = tt.gitMockSetup(mockCtrl, tt.promSpec)
+				gitClient, err = tt.gitMockSetup(mockCtrl, tt.promSpec, tt.promotion)
 				g.Expect(err).NotTo(HaveOccurred(), "failed setting up mocks")
 			}
 			mockCF := mockGitProviderClientFactory(gitClient)
@@ -598,4 +612,18 @@ func TestPromote(t *testing.T) {
 			}
 		})
 	}
+}
+
+var _ gomock.Matcher = containsMatcher{}
+
+type containsMatcher struct {
+	x string
+}
+
+func (m containsMatcher) Matches(x interface{}) bool {
+	return strings.Contains(x.(string), m.x)
+}
+
+func (m containsMatcher) String() string {
+	return m.x
 }
