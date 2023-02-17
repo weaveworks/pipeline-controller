@@ -169,7 +169,7 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 	}
 
 	if gitProviderType == v1alpha1.BitBucketServer {
-		orgRepoRef, err = parseBitbucketServerURL(gitURL)
+		orgRepoRef, err = ParseBitbucketServerURL(gitURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
 		}
@@ -245,7 +245,7 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 	return pr, nil
 }
 
-func parseBitbucketServerURL(url string) (*gitprovider.OrgRepositoryRef, error) {
+func ParseBitbucketServerURL(url string) (*gitprovider.OrgRepositoryRef, error) {
 	// The ParseOrgRepositoryURL function used for other providers
 	// fails to parse BitBucket Server URLs correctly
 	re := regexp.MustCompile(`://(?P<host>[^/]+)/(.+/)?(?P<key>[^/]+)/(?P<repo>[^/]+)\.git`)
