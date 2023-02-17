@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/go-git-providers/gitprovider"
@@ -14,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
@@ -151,30 +154,55 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 		return nil, ErrTokenIsEmpty
 	}
 
-	userRepoRef, err := gitprovider.ParseUserRepositoryURL(gitURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
-	}
+	var (
+		userRepoRef *gitprovider.UserRepositoryRef
+		orgRepoRef  *gitprovider.OrgRepositoryRef
+		err         error
+	)
 
 	provider := GitProviderConfig{
 		Token:            token,
 		TokenType:        "oauth2",
 		Type:             gitProviderType,
-		Domain:           userRepoRef.Domain,
+		Domain:           "",
 		DestructiveCalls: false,
+	}
+
+	if gitProviderType == v1alpha1.BitBucketServer {
+		orgRepoRef, err = parseBitbucketServerURL(gitURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
+		}
+		provider.Domain = orgRepoRef.GetDomain()
+	} else {
+		userRepoRef, err = gitprovider.ParseUserRepositoryURL(gitURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
+		}
+		provider.Domain = userRepoRef.GetDomain()
 	}
 
 	client, err := s.gitClientFactory(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating git provider client: %w", err)
 	}
-	//TODO: review me when https://github.com/fluxcd/go-git-providers/issues/176
-	// and https://github.com/fluxcd/go-git-providers/issues/175
-	// are fixed
-	userRepoRef.Domain = client.SupportedDomain()
-	userRepo, err := client.UserRepositories().Get(ctx, *userRepoRef)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve repository: %w", err)
+
+	var userRepo gitprovider.UserRepository
+
+	if gitProviderType == v1alpha1.BitBucketServer {
+		userRepo, err = client.OrgRepositories().Get(ctx, *orgRepoRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve repository: %w", err)
+		}
+	} else {
+		//TODO: review me when https://github.com/fluxcd/go-git-providers/issues/176
+		// and https://github.com/fluxcd/go-git-providers/issues/175
+		// are fixed
+		userRepoRef.Domain = client.SupportedDomain()
+		userRepo, err = client.UserRepositories().Get(ctx, *userRepoRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve repository: %w", err)
+		}
 	}
 
 	newTitle := fmt.Sprintf("Promote %s/%s in %s to %s",
@@ -215,4 +243,36 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 	}
 
 	return pr, nil
+}
+
+func parseBitbucketServerURL(url string) (*gitprovider.OrgRepositoryRef, error) {
+	// The ParseOrgRepositoryURL function used for other providers
+	// fails to parse BitBucket Server URLs correctly
+	re := regexp.MustCompile(`://(?P<host>[^/]+)/(.+/)?(?P<key>[^/]+)/(?P<repo>[^/]+)\.git`)
+	match := re.FindStringSubmatch(url)
+	result := make(map[string]string)
+	for i, name := range re.SubexpNames() {
+		if i != 0 && name != "" {
+			result[name] = match[i]
+		}
+	}
+	if len(result) != 3 {
+		return nil, fmt.Errorf("unable to parse repository URL %q using regex %q", url, re.String())
+	}
+
+	orgRef := &gitprovider.OrganizationRef{
+		Domain:       result["host"],
+		Organization: result["key"],
+	}
+	ref := &gitprovider.OrgRepositoryRef{
+		OrganizationRef: *orgRef,
+		RepositoryName:  result["repo"],
+	}
+	ref.SetKey(result["key"])
+
+	if !strings.HasPrefix(ref.Domain, "http://") && !strings.HasPrefix(ref.Domain, "https://") {
+		ref.Domain = "https://" + ref.Domain
+	}
+
+	return ref, nil
 }

@@ -2,12 +2,14 @@ package pullrequest
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/fluxcd/go-git-providers/github"
 	"github.com/fluxcd/go-git-providers/gitlab"
 	"github.com/fluxcd/go-git-providers/gitprovider"
+	"github.com/fluxcd/go-git-providers/stash"
 	"github.com/go-logr/logr"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
-	"strings"
 )
 
 var (
@@ -79,6 +81,11 @@ func NewGitProviderClientFactory(log logr.Logger) GitProviderClientFactory {
 			if err != nil {
 				return nil, err
 			}
+		case v1alpha1.BitBucketServer:
+			client, err = stash.NewStashClient("git", provider.Token, clientOptions...)
+			if err != nil {
+				return nil, err
+			}
 		default:
 			return nil, fmt.Errorf("the Git provider %q is not supported", provider.Type)
 		}
@@ -117,6 +124,7 @@ func gitProviderIsValid(gitProviderType v1alpha1.GitProviderType) (bool, error) 
 	}
 
 	switch gitProviderType {
+	case v1alpha1.BitBucketServer:
 	case v1alpha1.Github:
 	case v1alpha1.Gitlab:
 		return true, nil
