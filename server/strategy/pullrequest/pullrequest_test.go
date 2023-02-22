@@ -496,8 +496,9 @@ func TestPromote(t *testing.T) {
 			v1alpha1.Promotion{
 				Strategy: v1alpha1.Strategy{
 					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-						URL:  "to-be-filled-in-by-test-code",
+						Type:       "github",
+						URL:        "to-be-filled-in-by-test-code",
+						BaseBranch: "production",
 						SecretRef: meta.LocalObjectReference{
 							Name: "repo-credentials",
 						},
@@ -553,7 +554,12 @@ func TestPromote(t *testing.T) {
 				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
 				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
 
-				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), containsMatcher{x: prDesc}).Return(mockPR, nil)
+				baseBranch := gomock.Eq("main")
+				if promSpec.Strategy.PullRequest.BaseBranch != "" {
+					baseBranch = gomock.Eq(promSpec.Strategy.PullRequest.BaseBranch)
+				}
+
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), baseBranch, containsMatcher{x: prDesc}).Return(mockPR, nil)
 				return mockGitClient, nil
 			},
 		},

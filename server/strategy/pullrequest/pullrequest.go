@@ -127,7 +127,12 @@ func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Prom
 	}
 	log.Info("pushed promotion branch")
 
-	pr, err := g.createPullRequest(ctx, string(creds["token"]), headBranch, prSpec.Type, prSpec.URL, promotion)
+	baseBranch := prSpec.BaseBranch
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	pr, err := g.createPullRequest(ctx, string(creds["token"]), headBranch, baseBranch, prSpec.Type, prSpec.URL, promotion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PR: %w", err)
 	}
@@ -146,7 +151,7 @@ func (g PullRequest) fetchCredentials(ctx context.Context, c client.Client, ns s
 	return secret.Data, nil
 }
 
-func (s PullRequest) createPullRequest(ctx context.Context, token string, head string, gitProviderType pipelinev1alpha1.GitProviderType, gitURL string, promotion strategy.Promotion) (gitprovider.PullRequest, error) {
+func (s PullRequest) createPullRequest(ctx context.Context, token string, head string, baseBranch string, gitProviderType pipelinev1alpha1.GitProviderType, gitURL string, promotion strategy.Promotion) (gitprovider.PullRequest, error) {
 	if token == "" {
 		return nil, ErrTokenIsEmpty
 	}
@@ -186,7 +191,7 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 %s/%s/%s
 </details>`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
 
-	pr, err := userRepo.PullRequests().Create(ctx, newTitle, head, "main", prDesc)
+	pr, err := userRepo.PullRequests().Create(ctx, newTitle, head, baseBranch, prDesc)
 	if err != nil {
 		prList, err := userRepo.PullRequests().List(ctx)
 		if err != nil {

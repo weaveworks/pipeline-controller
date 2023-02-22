@@ -117,6 +117,10 @@ type PullRequestPromotion struct {
 	// the default "main" is used.
 	// +optional
 	Branch string `json:"branch"`
+	// The base branch is the one the PR will merge into. Note: If not specified
+	// the default "main" is used.
+	// +optional
+	BaseBranch string `json:"baseBranch"`
 	// SecretRef specifies the Secret containing authentication credentials for
 	// the git repository and for the git provider API.
 	// For HTTPS repositories the Secret must contain 'username' and 'password'
