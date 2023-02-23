@@ -95,8 +95,9 @@ type Strategy struct {
 type GitProviderType string
 
 const (
-	Github GitProviderType = "github"
-	Gitlab GitProviderType = "gitlab"
+	Github          GitProviderType = "github"
+	Gitlab          GitProviderType = "gitlab"
+	BitBucketServer GitProviderType = "bitbucket-server"
 )
 
 func (g GitProviderType) String() string {
@@ -106,7 +107,7 @@ func (g GitProviderType) String() string {
 type PullRequestPromotion struct {
 	// Indicates the git provider type to manage pull requests.
 	// +required
-	// +kubebuilder:validation:Enum=github;gitlab
+	// +kubebuilder:validation:Enum=github;gitlab;bitbucket-server
 	Type GitProviderType `json:"type"`
 	// The git repository URL used to patch the manifests for promotion.
 	// +required

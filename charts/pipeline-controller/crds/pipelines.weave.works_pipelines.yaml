@@ -133,6 +133,7 @@ spec:
                                   enum:
                                   - github
                                   - gitlab
+                                  - bitbucket-server
                                   type: string
                                 url:
                                   description: The git repository URL used to patch
@@ -256,6 +257,7 @@ spec:
                             enum:
                             - github
                             - gitlab
+                            - bitbucket-server
                             type: string
                           url:
                             description: The git repository URL used to patch the

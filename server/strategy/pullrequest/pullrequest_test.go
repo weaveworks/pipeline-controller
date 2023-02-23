@@ -1,6 +1,6 @@
 package pullrequest_test
 
-//go:generate mockgen -destination mock_gitprovider_test.go -package pullrequest_test github.com/fluxcd/go-git-providers/gitprovider Client,UserRepositoriesClient,UserRepository,PullRequestClient,PullRequest
+//go:generate mockgen -destination mock_gitprovider_test.go -package pullrequest_test github.com/fluxcd/go-git-providers/gitprovider Client,UserRepositoriesClient,UserRepository,PullRequestClient,PullRequest,OrgRepositoriesClient,OrgRepository
 
 import (
 	"context"
@@ -563,7 +563,71 @@ func TestPromote(t *testing.T) {
 				return mockGitClient, nil
 			},
 		},
-	}
+		{
+			"happy path bitbucket with auth",
+			v1alpha1.Promotion{
+				Strategy: v1alpha1.Strategy{
+					PullRequest: &v1alpha1.PullRequestPromotion{
+						Type: "bitbucket-server",
+						URL:  "to-be-filled-in-by-test-code",
+						SecretRef: meta.LocalObjectReference{
+							Name: "repo-credentials",
+						},
+					},
+				},
+			},
+			strategy.Promotion{
+				PipelineNamespace: "foo",
+				PipelineName:      "bar",
+				Version:           "1.2.3",
+				Environment: v1alpha1.Environment{
+					Name: "dev",
+				},
+			},
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{
+						Namespace: "foo",
+						Name:      "repo-credentials",
+					},
+					Data: map[string][]byte{
+						"token":    []byte("token"),
+						"username": []byte("user"),
+						"password": []byte("pass"),
+						"caFile":   tlsCA,
+					},
+				},
+			},
+			&gitServerConfig{
+				repoFixtureDir: "testdata/git/repository",
+				username:       "user",
+				password:       "pass",
+				publicKey:      tlsPublicKey,
+				privateKey:     tlsPrivateKey,
+				ca:             tlsCA,
+			},
+			nil,
+			"",
+			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (gitprovider.Client, error) {
+				repoRef, err := pullrequest.ParseBitbucketServerURL(promSpec.Strategy.PullRequest.URL)
+				if err != nil {
+					return nil, err
+				}
+				mockGitClient := NewMockClient(mockCtrl)
+				mockRepoClient := NewMockOrgRepositoriesClient(mockCtrl)
+				mockRepo := NewMockOrgRepository(mockCtrl)
+				mockPRClient := NewMockPullRequestClient(mockCtrl)
+				mockRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockRepo, nil)
+				mockGitClient.EXPECT().OrgRepositories().Return(mockRepoClient)
+				mockRepo.EXPECT().PullRequests().Return(mockPRClient)
+				mockPR := NewMockPullRequest(mockCtrl)
+				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
+				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
+
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), containsMatcher{x: prDesc}).Return(mockPR, nil)
+				return mockGitClient, nil
+			},
+		}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
