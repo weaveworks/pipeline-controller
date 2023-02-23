@@ -98,6 +98,11 @@ spec:
                               description: PullRequest defines a promotion through
                                 a Pull Request.
                               properties:
+                                baseBranch:
+                                  description: 'The base branch is the one the PR
+                                    will merge into. Note: If not specified the default
+                                    "main" is used.'
+                                  type: string
                                 branch:
                                   description: 'The branch to checkout after cloning.
                                     Note: This is just the base branch and does not
@@ -220,6 +225,10 @@ spec:
                         description: PullRequest defines a promotion through a Pull
                           Request.
                         properties:
+                          baseBranch:
+                            description: 'The base branch is the one the PR will merge
+                              into. Note: If not specified the default "main" is used.'
+                            type: string
                           branch:
                             description: 'The branch to checkout after cloning. Note:
                               This is just the base branch and does not denote the
