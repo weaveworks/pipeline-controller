@@ -116,10 +116,8 @@ spec:
                                     authentication credentials for the git repository
                                     and for the git provider API. For HTTPS repositories
                                     the Secret must contain 'username' and 'password'
-                                    fields. For SSH repositories the Secret must contain
-                                    'identity' and 'known_hosts' fields. For Git Provider
-                                    API to manage pull requests, it must contain a
-                                    'token' field.
+                                    fields. For Git Provider API to manage pull requests,
+                                    it must contain a 'token' field.
                                   properties:
                                     name:
                                       description: Name of the referent.
@@ -136,8 +134,8 @@ spec:
                                   - bitbucket-server
                                   type: string
                                 url:
-                                  description: The git repository URL used to patch
-                                    the manifests for promotion.
+                                  description: The git repository HTTPS URL used to
+                                    patch the manifests for promotion.
                                   type: string
                               required:
                               - secretRef
@@ -241,9 +239,8 @@ spec:
                               authentication credentials for the git repository and
                               for the git provider API. For HTTPS repositories the
                               Secret must contain 'username' and 'password' fields.
-                              For SSH repositories the Secret must contain 'identity'
-                              and 'known_hosts' fields. For Git Provider API to manage
-                              pull requests, it must contain a 'token' field.
+                              For Git Provider API to manage pull requests, it must
+                              contain a 'token' field.
                             properties:
                               name:
                                 description: Name of the referent.
@@ -260,8 +257,8 @@ spec:
                             - bitbucket-server
                             type: string
                           url:
-                            description: The git repository URL used to patch the
-                              manifests for promotion.
+                            description: The git repository HTTPS URL used to patch
+                              the manifests for promotion.
                             type: string
                         required:
                         - secretRef

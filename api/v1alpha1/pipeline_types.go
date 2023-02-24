@@ -109,7 +109,7 @@ type PullRequestPromotion struct {
 	// +required
 	// +kubebuilder:validation:Enum=github;gitlab;bitbucket-server
 	Type GitProviderType `json:"type"`
-	// The git repository URL used to patch the manifests for promotion.
+	// The git repository HTTPS URL used to patch the manifests for promotion.
 	// +required
 	URL string `json:"url"`
 	// The branch to checkout after cloning. Note: This is just the base
@@ -126,8 +126,6 @@ type PullRequestPromotion struct {
 	// the git repository and for the git provider API.
 	// For HTTPS repositories the Secret must contain 'username' and 'password'
 	// fields.
-	// For SSH repositories the Secret must contain 'identity'
-	// and 'known_hosts' fields.
 	// For Git Provider API to manage pull requests, it must contain a 'token' field.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
