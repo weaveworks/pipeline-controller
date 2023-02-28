@@ -130,12 +130,7 @@ func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Prom
 	}
 	log.Info("pushed promotion branch")
 
-	baseBranch := prSpec.BaseBranch
-	if baseBranch == "" {
-		baseBranch = "main"
-	}
-
-	pr, err := g.createPullRequest(ctx, string(creds["token"]), headBranch, baseBranch, prSpec.Type, prSpec.URL, promotion)
+	pr, err := g.createPullRequest(ctx, string(creds["token"]), headBranch, prSpec.BaseBranch, prSpec.Type, prSpec.URL, promotion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PR: %w", err)
 	}

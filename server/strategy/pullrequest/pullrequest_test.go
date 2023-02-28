@@ -553,13 +553,7 @@ func TestPromote(t *testing.T) {
 				mockPR := NewMockPullRequest(mockCtrl)
 				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
 				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
-
-				baseBranch := gomock.Eq("main")
-				if promSpec.Strategy.PullRequest.BaseBranch != "" {
-					baseBranch = gomock.Eq(promSpec.Strategy.PullRequest.BaseBranch)
-				}
-
-				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), baseBranch, containsMatcher{x: prDesc}).Return(mockPR, nil)
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(promSpec.Strategy.PullRequest.BaseBranch), containsMatcher{x: prDesc}).Return(mockPR, nil)
 				return mockGitClient, nil
 			},
 		},
@@ -568,8 +562,9 @@ func TestPromote(t *testing.T) {
 			v1alpha1.Promotion{
 				Strategy: v1alpha1.Strategy{
 					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "bitbucket-server",
-						URL:  "to-be-filled-in-by-test-code",
+						Type:       "bitbucket-server",
+						URL:        "to-be-filled-in-by-test-code",
+						BaseBranch: "master",
 						SecretRef: meta.LocalObjectReference{
 							Name: "repo-credentials",
 						},
@@ -624,7 +619,7 @@ func TestPromote(t *testing.T) {
 				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
 				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
 
-				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("main"), containsMatcher{x: prDesc}).Return(mockPR, nil)
+				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(promSpec.Strategy.PullRequest.BaseBranch), containsMatcher{x: prDesc}).Return(mockPR, nil)
 				return mockGitClient, nil
 			},
 		}}
@@ -642,7 +637,11 @@ func TestPromote(t *testing.T) {
 				})
 				server.AutoCreate()
 				repoPath := "/org/test.git"
-				_, err = initGitRepo(server, tt.server.repoFixtureDir, v1alpha1.DefaultBranch, repoPath)
+				repoName := tt.promSpec.Strategy.PullRequest.BaseBranch
+				if repoName == "" {
+					repoName = "main"
+				}
+				_, err = initGitRepo(server, tt.server.repoFixtureDir, repoName, repoPath)
 				g.Expect(err).NotTo(HaveOccurred())
 				if tt.server.username != "" {
 					server.Auth(tt.server.username, tt.server.password)
