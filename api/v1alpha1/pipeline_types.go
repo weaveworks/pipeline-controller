@@ -16,8 +16,6 @@ const (
 	// DefaultRequeueInterval is used when immediate re-queueing of a reconcile request isn't necessary, e.g. when it's expected to be
 	// triggered by a watched resource before.
 	DefaultRequeueInterval = 30 * time.Minute
-	// DefaultBranch denotes the branch to use when promoting applications and no particular branch is requested through the API object.
-	DefaultBranch = "main"
 )
 
 // +kubebuilder:object:root=true
@@ -113,14 +111,10 @@ type PullRequestPromotion struct {
 	// +required
 	URL string `json:"url"`
 	// The branch to checkout after cloning. Note: This is just the base
-	// branch and does not denote the branch used to create a PR from. The
-	// latter is generated automatically and cannot be provided. If not specified
-	// the default "main" is used.
-	// +optional
-	Branch string `json:"branch"`
-	// The base branch is the one the PR will merge into. Note: If not specified
-	// the default "main" is used.
-	// +optional
+	// branch that will eventually receive the PR changes upon merge and does
+	// not denote the branch used to create a PR from. The latter is generated
+	// automatically and cannot be provided.
+	// +required
 	BaseBranch string `json:"baseBranch"`
 	// SecretRef specifies the Secret containing authentication credentials for
 	// the git repository and for the git provider API.

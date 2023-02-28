@@ -99,17 +99,12 @@ spec:
                                 a Pull Request.
                               properties:
                                 baseBranch:
-                                  description: 'The base branch is the one the PR
-                                    will merge into. Note: If not specified the default
-                                    "main" is used.'
-                                  type: string
-                                branch:
                                   description: 'The branch to checkout after cloning.
-                                    Note: This is just the base branch and does not
+                                    Note: This is just the base branch that will eventually
+                                    receive the PR changes upon merge and does not
                                     denote the branch used to create a PR from. The
                                     latter is generated automatically and cannot be
-                                    provided. If not specified the default "main"
-                                    is used.'
+                                    provided.'
                                   type: string
                                 secretRef:
                                   description: SecretRef specifies the Secret containing
@@ -138,6 +133,7 @@ spec:
                                     patch the manifests for promotion.
                                   type: string
                               required:
+                              - baseBranch
                               - secretRef
                               - type
                               - url
@@ -224,15 +220,11 @@ spec:
                           Request.
                         properties:
                           baseBranch:
-                            description: 'The base branch is the one the PR will merge
-                              into. Note: If not specified the default "main" is used.'
-                            type: string
-                          branch:
                             description: 'The branch to checkout after cloning. Note:
-                              This is just the base branch and does not denote the
-                              branch used to create a PR from. The latter is generated
-                              automatically and cannot be provided. If not specified
-                              the default "main" is used.'
+                              This is just the base branch that will eventually receive
+                              the PR changes upon merge and does not denote the branch
+                              used to create a PR from. The latter is generated automatically
+                              and cannot be provided.'
                             type: string
                           secretRef:
                             description: SecretRef specifies the Secret containing
@@ -261,6 +253,7 @@ spec:
                               the manifests for promotion.
                             type: string
                         required:
+                        - baseBranch
                         - secretRef
                         - type
                         - url

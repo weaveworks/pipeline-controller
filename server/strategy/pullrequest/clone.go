@@ -28,16 +28,11 @@ func (s PullRequest) cloneRepo(ctx context.Context, prSpec v1alpha1.PullRequestP
 	}
 	defer c.Close()
 
-	branch := prSpec.Branch
-	if branch == "" {
-		branch = v1alpha1.DefaultBranch
-	}
-
 	cloneOpts := git.CloneOptions{
 		RecurseSubmodules: false,
 		ShallowClone:      false,
 		CheckoutStrategy: git.CheckoutStrategy{
-			Branch: branch,
+			Branch: prSpec.BaseBranch,
 		},
 	}
 
