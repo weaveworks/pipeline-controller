@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/assert"
 	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 
 	"github.com/fluxcd/go-git-providers/gitprovider"
@@ -31,9 +33,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/internal/git"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
+
+type gitServerConfig struct {
+	repoFixtureDir string
+	username       string
+	password       string
+	publicKey      []byte
+	privateKey     []byte
+	ca             []byte
+}
 
 func initGitRepo(server *gittestserver.GitServer, fixture, branch, repositoryPath string) (*gogit.Repository, error) {
 	fs := memfs.New()
@@ -146,8 +158,8 @@ func initTestTLS() ([]byte, []byte, []byte) {
 	return tlsPublicKey, tlsPrivateKey, tlsCA
 }
 
-func mockGitProviderClientFactory(c gitprovider.Client) pullrequest.GitProviderClientFactory {
-	return func(_ pullrequest.GitProviderConfig) (gitprovider.Client, error) {
+func mockGitProviderFactory(c git.Provider) pullrequest.GitProviderClientFactory {
+	return func(_ pullrequest.GitProviderConfig) (git.Provider, error) {
 		return c, nil
 	}
 }
@@ -196,290 +208,364 @@ func TestHandles(t *testing.T) {
 	}
 }
 
-func TestPromote(t *testing.T) {
+func TestPromote_no_pullrequest_spec(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: nil,
+		},
+	}
+	promotion := strategy.Promotion{}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+		},
+	)
+
+	assert.Equal(t, pullrequest.ErrSpecIsNil, err)
+	assert.Nil(t, res)
+}
+
+func TestPromote_no_secret(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+			},
+		},
+	}
+	promotion := strategy.Promotion{}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+		},
+	)
+
+	expectedError := "failed to fetch credentials: failed to fetch Secret: secrets \"\" not found"
+
+	assert.Equal(t, expectedError, err.Error())
+	assert.Nil(t, res)
+}
+
+func TestPromote_no_repo_url(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foobar",
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foobar",
+				Name:      "repo-credentials",
+			},
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+		},
+	)
+
+	expectedError := "failed to clone repo: failed configuring auth opts for repo URL \"\": no transport type set"
+
+	assert.Equal(t, expectedError, err.Error())
+	assert.Nil(t, res)
+}
+
+func TestPromote_invalid_repo_url(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+				URL:  "https://idontexists",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foobar",
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foobar",
+				Name:      "repo-credentials",
+			},
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+		},
+	)
+
+	expectedError := "failed to clone repo: failed cloning repository: unable to clone 'https://idontexists'"
+
+	assert.Contains(t, err.Error(), expectedError)
+	assert.Nil(t, res)
+}
+
+func TestPromote_github_no_token(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+				URL:  "to-be-filled-in-by-test-code",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+		Environment: v1alpha1.Environment{
+			Name: "dev",
+		},
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
+			},
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{repoFixtureDir: "testdata/git/repository"},
+		},
+	)
+
+	expectedError := "failed to create PR: git provider token is empty"
+
+	assert.Equal(t, expectedError, err.Error())
+	assert.Nil(t, res)
+}
+
+func TestPromote_missing_or_invalid_credentials(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+				URL:  "to-be-filled-in-by-test-code",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
+			},
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{
+				repoFixtureDir: "testdata/git/repository",
+				username:       "user",
+				password:       "pass",
+			},
+		},
+	)
+
+	expectedError := "failed to clone repo: failed cloning repository: unable to clone '.*': authentication required"
+
+	assert.Regexp(t, expectedError, err.Error())
+	assert.Nil(t, res)
+}
+
+func TestPromote_http_not_supported(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+				URL:  "to-be-filled-in-by-test-code",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+		Environment: v1alpha1.Environment{
+			Name: "dev",
+		},
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
+			},
+			Data: map[string][]byte{
+				"token":    []byte("token"),
+				"username": []byte("user"),
+				"password": []byte("pass"),
+			},
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{
+				repoFixtureDir: "testdata/git/repository",
+				username:       "user",
+				password:       "pass",
+			},
+		},
+	)
+
+	expectedError := "failed to create PR: failed parsing git provider URL: unsupported URL scheme, only HTTPS supported"
+
+	assert.Contains(t, err.Error(), expectedError)
+	assert.Nil(t, res)
+}
+
+func TestPromote_no_git_provider(t *testing.T) {
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				URL: "to-be-filled-in-by-test-code",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+		Environment: v1alpha1.Environment{
+			Name: "dev",
+		},
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
+			},
+			Data: map[string][]byte{
+				"token":    []byte("token"),
+				"username": []byte("user"),
+				"password": []byte("pass"),
+			},
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{
+				repoFixtureDir: "testdata/git/repository",
+				username:       "user",
+				password:       "pass",
+			},
+		},
+	)
+
+	expectedError := "invalid git provider type: git provider type is empty"
+
+	assert.Equal(t, expectedError, err.Error())
+	assert.Nil(t, res)
+}
+
+func TestPromote_invalid_git_provider(t *testing.T) {
 	tlsPublicKey, tlsPrivateKey, tlsCA := initTestTLS()
 
-	type gitServerConfig struct {
-		repoFixtureDir string
-		username       string
-		password       string
-		publicKey      []byte
-		privateKey     []byte
-		ca             []byte
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "subversion",
+				URL:  "to-be-filled-in-by-test-code",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
+				},
+			},
+		},
 	}
-	tests := []struct {
-		name         string
-		promSpec     v1alpha1.Promotion
-		promotion    strategy.Promotion
-		apiObjects   []client.Object
-		server       *gitServerConfig
-		err          error
-		errPattern   string
-		gitMockSetup func(*gomock.Controller, v1alpha1.Promotion, strategy.Promotion) (gitprovider.Client, error)
-	}{
-		{
-			"nil PullRequest spec",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: nil,
-				},
-			},
-			strategy.Promotion{},
-			nil,
-			nil,
-			pullrequest.ErrSpecIsNil,
-			"",
-			nil,
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+		Environment: v1alpha1.Environment{
+			Name: "dev",
 		},
-		{
-			"Secret not specified",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-					},
-				},
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
 			},
-			strategy.Promotion{},
-			nil,
-			nil,
-			nil,
-			"failed to fetch credentials: failed to fetch Secret: secrets \"\" not found",
-			nil,
+			Data: map[string][]byte{
+				"token":    []byte("token"),
+				"username": []byte("user"),
+				"password": []byte("pass"),
+				"caFile":   tlsCA,
+			},
 		},
-		{
-			"no repo URL specified",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foobar",
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foobar",
-						Name:      "repo-credentials",
-					},
-				},
-			},
-			nil,
-			nil,
-			"failed to clone repo: failed configuring auth opts for repo URL \"\": no transport type set",
-			nil,
-		},
-		{
-			"repo URL is invalid",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-						URL:  "https://idontexists",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foobar",
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foobar",
-						Name:      "repo-credentials",
-					},
-				},
-			},
-			nil,
-			nil,
-			"failed to clone repo: failed cloning repository: unable to clone 'https://idontexists'",
-			nil,
-		},
-		{
-			"no GitHub token",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-						URL:  "to-be-filled-in-by-test-code",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-				Environment: v1alpha1.Environment{
-					Name: "dev",
-				},
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-				},
-			},
-			&gitServerConfig{
-				repoFixtureDir: "testdata/git/repository",
-			},
-			nil,
-			"failed to create PR: git provider token is empty",
-			nil,
-		},
-		{
-			"missing/invalid credentials",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-						URL:  "to-be-filled-in-by-test-code",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-				},
-			},
-			&gitServerConfig{
-				repoFixtureDir: "testdata/git/repository",
-				username:       "user",
-				password:       "pass",
-			},
-			nil,
-			"failed to clone repo: failed cloning repository: unable to clone '.*': authentication required",
-			nil,
-		},
-		{
-			"HTTP scheme not supported",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "github",
-						URL:  "to-be-filled-in-by-test-code",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-				Environment: v1alpha1.Environment{
-					Name: "dev",
-				},
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-					Data: map[string][]byte{
-						"token":    []byte("token"),
-						"username": []byte("user"),
-						"password": []byte("pass"),
-					},
-				},
-			},
-			&gitServerConfig{
-				repoFixtureDir: "testdata/git/repository",
-				username:       "user",
-				password:       "pass",
-			},
-			nil,
-			"failed to create PR: failed parsing git provider URL: unsupported URL scheme, only HTTPS supported",
-			nil,
-		},
-		{
-			"no git provider",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						URL: "to-be-filled-in-by-test-code",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-				},
-			},
-			&gitServerConfig{
-				repoFixtureDir: "testdata/git/repository",
-				username:       "user",
-				password:       "pass",
-			},
-			nil,
-			"git provider type is empty",
-			nil,
-		},
-		{
-			"invalid git provider",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type: "subversion",
-						URL:  "to-be-filled-in-by-test-code",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
-				},
-			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-					Data: map[string][]byte{
-						"token":    []byte("token"),
-						"username": []byte("user"),
-						"password": []byte("pass"),
-						"caFile":   tlsCA,
-					},
-				},
-			},
-			&gitServerConfig{
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{
 				repoFixtureDir: "testdata/git/repository",
 				username:       "user",
 				password:       "pass",
@@ -487,47 +573,60 @@ func TestPromote(t *testing.T) {
 				privateKey:     tlsPrivateKey,
 				ca:             tlsCA,
 			},
-			nil,
-			"invalid git provider type",
-			nil,
 		},
-		{
-			"happy path with auth",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type:       "github",
-						URL:        "to-be-filled-in-by-test-code",
-						BaseBranch: "production",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
+	)
+
+	expectedError := "invalid git provider type: the Git provider \"subversion\" is not supported"
+
+	assert.Equal(t, expectedError, err.Error())
+	assert.Nil(t, res)
+}
+
+func TestPromote_github_happy_path_with_auth(t *testing.T) {
+	tlsPublicKey, tlsPrivateKey, tlsCA := initTestTLS()
+
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type:       "github",
+				URL:        "to-be-filled-in-by-test-code",
+				BaseBranch: "production",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
 				},
 			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-				Version:           "1.2.3",
-				Environment: v1alpha1.Environment{
-					Name: "dev",
-				},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+		Version:           "1.2.3",
+		Environment: v1alpha1.Environment{
+			Name: "dev",
+		},
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
 			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-					Data: map[string][]byte{
-						"token":    []byte("token"),
-						"username": []byte("user"),
-						"password": []byte("pass"),
-						"caFile":   tlsCA,
-					},
-				},
+			Data: map[string][]byte{
+				"token":    []byte("token"),
+				"username": []byte("user"),
+				"password": []byte("pass"),
+				"caFile":   tlsCA,
 			},
-			&gitServerConfig{
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{
 				repoFixtureDir: "testdata/git/repository",
 				username:       "user",
 				password:       "pass",
@@ -535,65 +634,84 @@ func TestPromote(t *testing.T) {
 				privateKey:     tlsPrivateKey,
 				ca:             tlsCA,
 			},
-			nil,
-			"",
-			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (gitprovider.Client, error) {
-				repoRef, err := gitprovider.ParseUserRepositoryURL(promSpec.Strategy.PullRequest.URL)
+			mockSetup: func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (git.Provider, error) {
+				repoRef, err := gitprovider.ParseOrgRepositoryURL(promSpec.Strategy.PullRequest.URL)
 				if err != nil {
 					return nil, err
 				}
+				repoRef.Domain = git.AddSchemeToDomain(repoRef.Domain)
+				repoRef = git.WithCombinedSubOrgs(*repoRef)
+
 				mockGitClient := NewMockClient(mockCtrl)
-				mockRepoClient := NewMockUserRepositoriesClient(mockCtrl)
-				mockRepo := NewMockUserRepository(mockCtrl)
+				mockOrgRepoClient := NewMockOrgRepositoriesClient(mockCtrl)
+				mockOrgRepo := NewMockOrgRepository(mockCtrl)
 				mockPRClient := NewMockPullRequestClient(mockCtrl)
-				mockRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockRepo, nil)
-				mockGitClient.EXPECT().UserRepositories().Return(mockRepoClient)
-				mockGitClient.EXPECT().SupportedDomain().Return(repoRef.Domain)
-				mockRepo.EXPECT().PullRequests().Return(mockPRClient)
 				mockPR := NewMockPullRequest(mockCtrl)
-				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
+
 				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
+
+				mockGitClient.EXPECT().OrgRepositories().Return(mockOrgRepoClient)
+				mockOrgRepoClient.EXPECT().Get(gomock.Any(), gomock.Eq(*repoRef)).Return(mockOrgRepo, nil)
+				mockOrgRepo.EXPECT().PullRequests().Return(mockPRClient)
+				mockPR.EXPECT().Get().AnyTimes().Return(gitprovider.PullRequestInfo{})
 				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(promSpec.Strategy.PullRequest.BaseBranch), containsMatcher{x: prDesc}).Return(mockPR, nil)
-				return mockGitClient, nil
+
+				return git.NewFactory(logr.Discard()).Create(
+					git.GitHubProviderName,
+					git.WithConfiguredClient(mockGitClient),
+				)
 			},
 		},
-		{
-			"happy path bitbucket with auth",
-			v1alpha1.Promotion{
-				Strategy: v1alpha1.Strategy{
-					PullRequest: &v1alpha1.PullRequestPromotion{
-						Type:       "bitbucket-server",
-						URL:        "to-be-filled-in-by-test-code",
-						BaseBranch: "master",
-						SecretRef: meta.LocalObjectReference{
-							Name: "repo-credentials",
-						},
-					},
+	)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+}
+
+func TestPromote_bitbucket_happy_path_with_auth(t *testing.T) {
+	tlsPublicKey, tlsPrivateKey, tlsCA := initTestTLS()
+
+	promSpec := v1alpha1.Promotion{
+		Strategy: v1alpha1.Strategy{
+			PullRequest: &v1alpha1.PullRequestPromotion{
+				Type: "github",
+				URL:  "to-be-filled-in-by-test-code",
+				SecretRef: meta.LocalObjectReference{
+					Name: "repo-credentials",
 				},
 			},
-			strategy.Promotion{
-				PipelineNamespace: "foo",
-				PipelineName:      "bar",
-				Version:           "1.2.3",
-				Environment: v1alpha1.Environment{
-					Name: "dev",
-				},
+		},
+	}
+	promotion := strategy.Promotion{
+		PipelineNamespace: "foo",
+		PipelineName:      "bar",
+		Version:           "1.2.3",
+		Environment: v1alpha1.Environment{
+			Name: "dev",
+		},
+	}
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Namespace: "foo",
+				Name:      "repo-credentials",
 			},
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: v1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "repo-credentials",
-					},
-					Data: map[string][]byte{
-						"token":    []byte("token"),
-						"username": []byte("user"),
-						"password": []byte("pass"),
-						"caFile":   tlsCA,
-					},
-				},
+			Data: map[string][]byte{
+				"token":    []byte("token"),
+				"username": []byte("user"),
+				"password": []byte("pass"),
+				"caFile":   tlsCA,
 			},
-			&gitServerConfig{
+		},
+	}
+
+	res, err := newPromotionRequest(
+		t,
+		requestOptions{
+			promotionSpec: promSpec,
+			promotion:     promotion,
+			objects:       objects,
+			gitServerOpts: &gitServerConfig{
 				repoFixtureDir: "testdata/git/repository",
 				username:       "user",
 				password:       "pass",
@@ -601,13 +719,12 @@ func TestPromote(t *testing.T) {
 				privateKey:     tlsPrivateKey,
 				ca:             tlsCA,
 			},
-			nil,
-			"",
-			func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (gitprovider.Client, error) {
-				repoRef, err := pullrequest.ParseBitbucketServerURL(promSpec.Strategy.PullRequest.URL)
+			mockSetup: func(mockCtrl *gomock.Controller, promSpec v1alpha1.Promotion, promotion strategy.Promotion) (git.Provider, error) {
+				repoRef, err := git.GoGitProvider{}.ParseBitbucketServerURL(promSpec.Strategy.PullRequest.URL)
 				if err != nil {
 					return nil, err
 				}
+
 				mockGitClient := NewMockClient(mockCtrl)
 				mockRepoClient := NewMockOrgRepositoriesClient(mockCtrl)
 				mockRepo := NewMockOrgRepository(mockCtrl)
@@ -620,67 +737,99 @@ func TestPromote(t *testing.T) {
 				prDesc := fmt.Sprintf(`%s/%s/%s`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
 
 				mockPRClient.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(promSpec.Strategy.PullRequest.BaseBranch), containsMatcher{x: prDesc}).Return(mockPR, nil)
-				return mockGitClient, nil
+
+				return git.NewFactory(logr.Discard()).Create(
+					git.BitBucketServerProviderName,
+					git.WithConfiguredClient(mockGitClient),
+				)
 			},
-		}}
+		},
+	)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := testingutils.NewGomegaWithT(t)
-			fc := fake.NewClientBuilder().WithObjects(tt.apiObjects...).Build()
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+}
 
-			if tt.server != nil {
-				server, err := gittestserver.NewTempGitServer()
-				g.Expect(err).NotTo(HaveOccurred())
-				t.Cleanup(func() {
-					os.RemoveAll(server.Root())
-				})
-				server.AutoCreate()
-				repoPath := "/org/test.git"
-				repoName := tt.promSpec.Strategy.PullRequest.BaseBranch
-				if repoName == "" {
-					repoName = "main"
-				}
-				_, err = initGitRepo(server, tt.server.repoFixtureDir, repoName, repoPath)
-				g.Expect(err).NotTo(HaveOccurred())
-				if tt.server.username != "" {
-					server.Auth(tt.server.username, tt.server.password)
-				}
-				if tt.server.privateKey != nil {
-					g.Expect(server.StartHTTPS(tt.server.publicKey, tt.server.privateKey, tt.server.ca, "example.org")).To(Succeed())
-				} else {
-					g.Expect(server.StartHTTP()).To(Succeed())
-				}
-				t.Cleanup(func() {
-					server.StopHTTP()
-				})
-				tt.promSpec.Strategy.PullRequest.URL = server.HTTPAddress() + repoPath
-			}
+type requestOptions struct {
+	promotionSpec v1alpha1.Promotion
+	promotion     strategy.Promotion
+	objects       []client.Object
+	gitServerOpts *gitServerConfig
+	mockSetup     func(*gomock.Controller, v1alpha1.Promotion, strategy.Promotion) (git.Provider, error)
+}
 
-			var gitClient gitprovider.Client
-			if tt.gitMockSetup != nil {
-				mockCtrl := gomock.NewController(t)
-				var err error
-				gitClient, err = tt.gitMockSetup(mockCtrl, tt.promSpec, tt.promotion)
-				g.Expect(err).NotTo(HaveOccurred(), "failed setting up mocks")
-			}
-			mockCF := mockGitProviderClientFactory(gitClient)
-			strat, err := pullrequest.New(fc, logger.NewLogger(logger.Options{}), pullrequest.GitClientFactory(mockCF))
-			if err != nil {
-				t.Fatalf("unable to create pullrequest promotion strategy: %s", err)
-			}
+func newPromotionRequest(t *testing.T, opts requestOptions) (*strategy.PromotionResult, error) {
+	var (
+		err       error
+		server    *gittestserver.GitServer
+		gitClient git.Provider
+	)
 
-			res, err := strat.Promote(context.Background(), tt.promSpec, tt.promotion)
-			if tt.err != nil {
-				g.Expect(err).To(Equal(tt.err))
-			} else if tt.errPattern != "" {
-				g.Expect(err).To(MatchError(MatchRegexp(tt.errPattern)))
-			} else {
-				g.Expect(err).To(BeNil())
-				g.Expect(res).NotTo(BeNil())
-			}
+	if opts.gitServerOpts != nil {
+		server, opts.promotionSpec.Strategy.PullRequest.URL, err = newGitServer(opts.promotionSpec, *opts.gitServerOpts)
+		if err != nil {
+			return nil, err
+		}
+		t.Cleanup(func() {
+			server.StopHTTP()
+			os.RemoveAll(server.Root())
 		})
 	}
+
+	fc := fake.NewClientBuilder().WithObjects(opts.objects...).Build()
+
+	if opts.mockSetup != nil {
+		mockCtrl := gomock.NewController(t)
+		gitClient, err = opts.mockSetup(mockCtrl, opts.promotionSpec, opts.promotion)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	mockCF := mockGitProviderFactory(gitClient)
+
+	strat, err := pullrequest.New(fc, logger.NewLogger(logger.Options{}), pullrequest.GitClientFactory(mockCF))
+	if err != nil {
+		return nil, err
+	}
+
+	return strat.Promote(context.Background(), opts.promotionSpec, opts.promotion)
+}
+
+func newGitServer(promSpec v1alpha1.Promotion, opts gitServerConfig) (*gittestserver.GitServer, string, error) {
+	server, err := gittestserver.NewTempGitServer()
+	if err != nil {
+		return server, "", err
+	}
+
+	server.AutoCreate()
+	repoPath := "/org/test.git"
+
+	repoName := promSpec.Strategy.PullRequest.BaseBranch
+	if repoName == "" {
+		repoName = "main"
+	}
+
+	_, err = initGitRepo(server, opts.repoFixtureDir, repoName, repoPath)
+	if err != nil {
+		return server, "", err
+	}
+
+	if opts.username != "" {
+		server.Auth(opts.username, opts.password)
+	}
+
+	if opts.privateKey != nil {
+		if err = server.StartHTTPS(opts.publicKey, opts.privateKey, opts.ca, "example.org"); err != nil {
+			return server, "", err
+		}
+	} else {
+		if err := server.StartHTTP(); err != nil {
+			return server, "", err
+		}
+	}
+
+	return server, server.HTTPAddress() + repoPath, nil
 }
 
 var _ gomock.Matcher = containsMatcher{}

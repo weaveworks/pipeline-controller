@@ -4,20 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 
-	"github.com/fluxcd/go-git-providers/gitprovider"
-
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/git"
+	fgit "github.com/fluxcd/pkg/git"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/internal/git"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
@@ -113,9 +109,9 @@ func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Prom
 		return &strategy.PromotionResult{}, nil
 	}
 
-	commit, err := gitClient.Commit(git.Commit{
+	commit, err := gitClient.Commit(fgit.Commit{
 		Message: "promoting version",
-		Author: git.Signature{
+		Author: fgit.Signature{
 			Name: "Promotion Server",
 			When: time.Now(),
 		},
@@ -134,10 +130,10 @@ func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Prom
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PR: %w", err)
 	}
-	log.Info("created PR", "pr", pr.Get().WebURL)
+	log.Info("created PR", "pr", pr.Link)
 
 	return &strategy.PromotionResult{
-		Location: pr.Get().WebURL,
+		Location: pr.Link,
 	}, nil
 }
 
@@ -149,15 +145,13 @@ func (g PullRequest) fetchCredentials(ctx context.Context, c client.Client, ns s
 	return secret.Data, nil
 }
 
-func (s PullRequest) createPullRequest(ctx context.Context, token string, head string, baseBranch string, gitProviderType pipelinev1alpha1.GitProviderType, gitURL string, promotion strategy.Promotion) (gitprovider.PullRequest, error) {
+func (s PullRequest) createPullRequest(ctx context.Context, token string, head string, baseBranch string, gitProviderType pipelinev1alpha1.GitProviderType, gitURL string, promotion strategy.Promotion) (*git.PullRequest, error) {
 	if token == "" {
 		return nil, ErrTokenIsEmpty
 	}
 
 	var (
-		userRepoRef *gitprovider.UserRepositoryRef
-		orgRepoRef  *gitprovider.OrgRepositoryRef
-		err         error
+		err error
 	)
 
 	provider := GitProviderConfig{
@@ -168,111 +162,72 @@ func (s PullRequest) createPullRequest(ctx context.Context, token string, head s
 		DestructiveCalls: false,
 	}
 
-	if gitProviderType == v1alpha1.BitBucketServer {
-		orgRepoRef, err = ParseBitbucketServerURL(gitURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
-		}
-		provider.Domain = orgRepoRef.GetDomain()
-	} else {
-		userRepoRef, err = gitprovider.ParseUserRepositoryURL(gitURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
-		}
-		provider.Domain = userRepoRef.GetDomain()
+	parsedURL, err := git.ParseURL(string(gitProviderType), gitURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed parsing git provider URL: %w", err)
 	}
+
+	provider.Domain = parsedURL.Domain
 
 	client, err := s.gitClientFactory(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating git provider client: %w", err)
 	}
 
-	var userRepo gitprovider.UserRepository
-
-	if gitProviderType == v1alpha1.BitBucketServer {
-		userRepo, err = client.OrgRepositories().Get(ctx, *orgRepoRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve repository: %w", err)
-		}
-	} else {
-		//TODO: review me when https://github.com/fluxcd/go-git-providers/issues/176
-		// and https://github.com/fluxcd/go-git-providers/issues/175
-		// are fixed
-		userRepoRef.Domain = client.SupportedDomain()
-		userRepo, err = client.UserRepositories().Get(ctx, *userRepoRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve repository: %w", err)
-		}
-	}
-
-	newTitle := fmt.Sprintf("Promote %s/%s in %s to %s",
-		promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name, promotion.Version)
+	newTitle := fmt.Sprintf(
+		"Promote %s/%s in %s to %s",
+		promotion.PipelineNamespace,
+		promotion.PipelineName,
+		promotion.Environment.Name,
+		promotion.Version,
+	)
 	prDesc := fmt.Sprintf(`<details>
 <summary>metadata</summary>
 !!! DO NOT EDIT !!!
 
 %s/%s/%s
-</details>`, promotion.PipelineNamespace, promotion.PipelineName, promotion.Environment.Name)
+</details>`,
+		promotion.PipelineNamespace,
+		promotion.PipelineName,
+		promotion.Environment.Name,
+	)
 
-	pr, err := userRepo.PullRequests().Create(ctx, newTitle, head, baseBranch, prDesc)
+	pr, err := client.CreatePullRequest(ctx, git.PullRequestInput{
+		RepositoryURL: gitURL,
+		Title:         newTitle,
+		Body:          prDesc,
+		Head:          head,
+		Base:          baseBranch,
+		Commits:       []git.Commit{},
+	})
+	if err == nil {
+		return pr, nil
+	}
+
+	prList, err := client.ListPullRequests(ctx, gitURL)
 	if err != nil {
-		prList, err := userRepo.PullRequests().List(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed listing PRs: %w", err)
-		}
+		return nil, fmt.Errorf("failed listing PRs: %w", err)
+	}
 
-		var existingPRNo *int
-		for _, existingPR := range prList {
-			if existingPR.Get().SourceBranch == head {
-				no := existingPR.Get().Number
-				existingPRNo = &no
-				break // we found a matching PR, no more iteration necessary
-			}
+	var existingPRNo *int
+	for _, existingPR := range prList {
+		if existingPR.Source == head {
+			no := existingPR.Number
+			existingPRNo = &no
+			break // we found a matching PR, no more iteration necessary
 		}
+	}
 
-		if existingPRNo == nil {
-			return nil, fmt.Errorf("failed to create PR: %w", err)
-		}
+	if existingPRNo == nil {
+		return nil, fmt.Errorf("failed to create or find existing PR: headBranch=%s baseBranch=%s", head, baseBranch)
+	}
 
-		pr, err = userRepo.PullRequests().Edit(ctx, *existingPRNo, gitprovider.EditOptions{
-			Title: &newTitle,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to update existing PR: %w", err)
-		}
+	pr, err = client.UpdatePullRequest(ctx, gitURL, *existingPRNo, git.UpdatePullRequestOptions{
+		Title: newTitle,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update existing PR: %w", err)
 	}
 
 	return pr, nil
-}
-
-func ParseBitbucketServerURL(url string) (*gitprovider.OrgRepositoryRef, error) {
-	// The ParseOrgRepositoryURL function used for other providers
-	// fails to parse BitBucket Server URLs correctly
-	re := regexp.MustCompile(`://(?P<host>[^/]+)/(.+/)?(?P<key>[^/]+)/(?P<repo>[^/]+)\.git`)
-	match := re.FindStringSubmatch(url)
-	result := make(map[string]string)
-	for i, name := range re.SubexpNames() {
-		if i != 0 && name != "" {
-			result[name] = match[i]
-		}
-	}
-	if len(result) != 3 {
-		return nil, fmt.Errorf("unable to parse repository URL %q using regex %q", url, re.String())
-	}
-
-	orgRef := &gitprovider.OrganizationRef{
-		Domain:       result["host"],
-		Organization: result["key"],
-	}
-	ref := &gitprovider.OrgRepositoryRef{
-		OrganizationRef: *orgRef,
-		RepositoryName:  result["repo"],
-	}
-	ref.SetKey(result["key"])
-
-	if !strings.HasPrefix(ref.Domain, "http://") && !strings.HasPrefix(ref.Domain, "https://") {
-		ref.Domain = "https://" + ref.Domain
-	}
-
-	return ref, nil
 }
