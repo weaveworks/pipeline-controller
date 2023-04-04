@@ -164,10 +164,18 @@ func (p *GitHubProvider) UpdatePullRequest(ctx context.Context, repoURL string, 
 	})
 }
 
+func (p *GitHubProvider) DeleteBranch(ctx context.Context, repoURL, branchName string) error {
+	return nil
+}
+
 func (p *GitHubProvider) Name() string {
 	return GitHubProviderName
 }
 
 func (p *GitHubProvider) SupportedDomain() string {
 	return p.client.SupportedDomain()
+}
+
+func (p *GitHubProvider) RawClient() interface{} {
+	return p.client
 }

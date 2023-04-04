@@ -24,6 +24,8 @@ type Provider interface {
 	GetTreeList(ctx context.Context, repoUrl, sha, path string) ([]*TreeEntry, error)
 	ListPullRequests(ctx context.Context, repoURL string) ([]*PullRequest, error)
 	UpdatePullRequest(ctx context.Context, repoURL string, number int, options UpdatePullRequestOptions) (*PullRequest, error)
+
+	RawClient() interface{}
 }
 
 // CommitFile represents the contents of file in the repository.

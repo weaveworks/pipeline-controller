@@ -234,3 +234,7 @@ func (p *AzureDevOpsProvider) Name() string {
 func (p *AzureDevOpsProvider) SupportedDomain() string {
 	return ""
 }
+
+func (p *AzureDevOpsProvider) RawClient() interface{} {
+	return p.client
+}

@@ -25,7 +25,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/golang/mock v1.6.0
 	github.com/google/go-github/v32 v32.1.0
-	github.com/google/go-github/v47 v47.1.0
+	github.com/google/go-github/v49 v49.1.0
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/jenkins-x/go-scm v1.13.12
 	github.com/onsi/gomega v1.27.4
@@ -91,7 +91,6 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/go-containerregistry v0.11.0 // indirect
-	github.com/google/go-github/v49 v49.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect

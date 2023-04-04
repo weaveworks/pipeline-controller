@@ -174,3 +174,7 @@ func (p *BitBucketServerProvider) Name() string {
 func (p *BitBucketServerProvider) SupportedDomain() string {
 	return p.client.SupportedDomain()
 }
+
+func (p *BitBucketServerProvider) RawClient() interface{} {
+	return p.client
+}

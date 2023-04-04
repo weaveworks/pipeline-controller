@@ -1,20 +1,21 @@
 //go:build e2e
 
-package e2e
+package e2e_test
 
 import (
 	"context"
+	"log"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/fluxcd/helm-controller/api/v2beta1"
 	"github.com/onsi/gomega"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-	"log"
-	"os"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"testing"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 )

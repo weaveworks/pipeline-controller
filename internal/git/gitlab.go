@@ -203,3 +203,7 @@ func (p *GitLabProvider) Name() string {
 func (p *GitLabProvider) SupportedDomain() string {
 	return p.client.SupportedDomain()
 }
+
+func (p *GitLabProvider) RawClient() interface{} {
+	return p.client
+}
