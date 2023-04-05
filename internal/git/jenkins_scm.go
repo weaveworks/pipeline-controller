@@ -20,7 +20,7 @@ type jenkinsSCM struct{}
 func (p *jenkinsSCM) GetRepository(ctx context.Context, log logr.Logger, client *scm.Client, repoURL *url.URL) (*scm.Repository, error) {
 	pathParts := strings.Split(strings.Trim(repoURL.Path, "/"), "/")
 	if len(pathParts) != 4 {
-		return nil, fmt.Errorf("unbale to parse url %+v", repoURL)
+		return nil, fmt.Errorf("unable to parse url %+v", repoURL)
 	}
 
 	org := pathParts[0]
