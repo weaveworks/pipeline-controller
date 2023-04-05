@@ -1,17 +1,23 @@
 //go:build e2e
 
-package e2e
+package e2e_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/fluxcd/go-git-providers/gitprovider"
 	"github.com/fluxcd/helm-controller/api/v2beta1"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v49/github"
 	"github.com/hashicorp/go-uuid"
 	. "github.com/onsi/gomega"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -19,16 +25,11 @@ import (
 	"github.com/weaveworks/pipeline-controller/pkg/conditions"
 	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 	gitlab2 "github.com/xanzy/go-gitlab"
-	"io"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"log"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
-	"testing"
-	"time"
 )
 
 const (
@@ -120,7 +121,7 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 		return fmt.Errorf("cannot delete branch for pipeline without promotion")
 	}
 
-	pullRequestPromotion := promotion.PullRequest
+	pullRequestPromotion := promotion.Strategy.PullRequest
 	if pullRequestPromotion == nil {
 		return fmt.Errorf("cannot delete branch for pipelines without pullRequest")
 	}
@@ -154,30 +155,29 @@ func deleteGitBranchByName(ctx context.Context, g *WithT, c client.Client, pipel
 	}
 	//TODO it should not be needed - gitlab ggp issue
 	userRepoRef.Domain = gitProviderClient.SupportedDomain()
-	userRepo, err := gitProviderClient.UserRepositories().Get(ctx, *userRepoRef)
-	if err != nil {
-		return fmt.Errorf("could not get repository: %w", err)
-	}
-	clientRaw := gitProviderClient.Raw()
 	//TODO contribute me to ggp
 	switch pullRequestPromotion.Type {
 	case v1alpha1.Github:
 		//cannot delete github branch so renaming
-		gClient := clientRaw.(*github.Client)
+		clientRaw := gitProviderClient.RawClient().(gitprovider.Client).Raw().(*github.Client)
 		generatedUuid, err := uuid.GenerateUUID()
 		if err != nil {
 			return fmt.Errorf("could not generate uuid: %w", err)
 		}
 		owner := userRepoRef.UserLogin
 		repo := userRepoRef.RepositoryName
-		_, _, err = gClient.Repositories.RenameBranch(ctx, owner, repo, branchName, fmt.Sprintf("%s-%s", branchName, generatedUuid))
+		_, _, err = clientRaw.Repositories.RenameBranch(ctx, owner, repo, branchName, fmt.Sprintf("%s-%s", branchName, generatedUuid))
 		if err != nil {
 			return fmt.Errorf("could not rename branch: %w", err)
 		}
 	case v1alpha1.Gitlab:
-		gitlabProject := userRepo.APIObject().(*gitlab2.Project)
-		gClient := clientRaw.(*gitlab2.Client)
-		_, err := gClient.Branches.DeleteBranch(gitlabProject.ID, branchName, nil)
+		clientRaw := gitProviderClient.RawClient().(gitprovider.Client).Raw().(*gitlab2.Client)
+		glRepo, err := gitProviderClient.RawClient().(gitprovider.Client).UserRepositories().Get(ctx, *userRepoRef)
+		if err != nil {
+			return fmt.Errorf("could not delete branch: %w", err)
+		}
+		gitlabProject := glRepo.APIObject().(*gitlab2.Project)
+		_, err = clientRaw.Branches.DeleteBranch(gitlabProject.ID, branchName, nil)
 		if err != nil {
 			return fmt.Errorf("could not delete gitlab branch: %w", err)
 		}

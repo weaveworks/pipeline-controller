@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxcd/go-git-providers/github"
-	"github.com/fluxcd/go-git-providers/gitlab"
-	"github.com/fluxcd/go-git-providers/gitprovider"
-	"github.com/fluxcd/go-git-providers/stash"
 	"github.com/go-logr/logr"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/internal/git"
 )
 
 var (
@@ -21,7 +18,7 @@ var (
 	ErrTokenIsEmpty               = fmt.Errorf("git provider token is empty")
 )
 
-type GitProviderClientFactory func(provider GitProviderConfig) (gitprovider.Client, error)
+type GitProviderClientFactory func(provider GitProviderConfig) (git.Provider, error)
 
 type GitProviderConfig struct {
 	Token            string
@@ -31,14 +28,8 @@ type GitProviderConfig struct {
 	DestructiveCalls bool
 }
 
-// same as https://github.com/weaveworks/weave-gitops-enterprise/blob/7ef05e773d7650a83cfa86dbd642253353b584c0/cmd/clusters-service/pkg/git/git.go#L286
 func NewGitProviderClientFactory(log logr.Logger) GitProviderClientFactory {
-	return func(provider GitProviderConfig) (gitprovider.Client, error) {
-		var client gitprovider.Client
-		var err error
-
-		clientOptions := []gitprovider.ClientOption{}
-
+	return func(provider GitProviderConfig) (git.Provider, error) {
 		if provider.Type == "" {
 			return nil, ErrGitProviderTypeEmpty
 		}
@@ -55,11 +46,13 @@ func NewGitProviderClientFactory(log logr.Logger) GitProviderClientFactory {
 			return nil, fmt.Errorf("git provider token type is invalid %s", provider.TokenType)
 		}
 
-		clientOptions = append(clientOptions, gitprovider.WithOAuth2Token(provider.Token))
+		options := []git.ProviderWithFn{
+			git.WithOAuth2Token(provider.Token),
+		}
 
 		if provider.DestructiveCalls {
 			log.Info("creating client with destructive calls enabled")
-			clientOptions = append(clientOptions, gitprovider.WithDestructiveAPICalls(provider.DestructiveCalls))
+			options = append(options, git.WithDestructiveAPICalls())
 		}
 
 		if provider.Domain != "" {
@@ -67,29 +60,31 @@ func NewGitProviderClientFactory(log logr.Logger) GitProviderClientFactory {
 			if err != nil {
 				return nil, err
 			}
-			clientOptions = append(clientOptions, gitprovider.WithDomain(domain))
+
+			options = append(options, git.WithDomain(domain))
 		}
+
+		factory := git.NewFactory(log)
+		providerName := ""
 
 		switch provider.Type {
 		case v1alpha1.Github:
-			client, err = github.NewClient(clientOptions...)
-			if err != nil {
-				return nil, err
-			}
+			providerName = git.GitHubProviderName
 		case v1alpha1.Gitlab:
-			client, err = gitlab.NewClient(provider.Token, provider.TokenType, clientOptions...)
-			if err != nil {
-				return nil, err
-			}
+			providerName = git.GitLabProviderName
+			options = append(options, git.WithToken(provider.TokenType, provider.Token))
 		case v1alpha1.BitBucketServer:
-			client, err = stash.NewStashClient("git", provider.Token, clientOptions...)
-			if err != nil {
-				return nil, err
-			}
+			providerName = git.BitBucketServerProviderName
+			options = append(options, git.WithToken("token", provider.Token))
+			options = append(options, git.WithUsername("git"))
+		case v1alpha1.AzureDevOps:
+			providerName = git.AzureDevOpsProviderName
+			options = append(options, git.WithToken(provider.TokenType, provider.Token))
 		default:
 			return nil, fmt.Errorf("the Git provider %q is not supported", provider.Type)
 		}
-		return client, err
+
+		return factory.Create(providerName, options...)
 	}
 
 }

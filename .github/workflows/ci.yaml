@@ -21,7 +21,7 @@ jobs:
     - name: Setup
       uses: actions/setup-go@v3
       with:
-        go-version: 1.19.x
+        go-version: 1.20.x
         cache: true
     - name: Prepare
       run: |
@@ -44,7 +44,7 @@ jobs:
     - name: Setup
       uses: actions/setup-go@v3
       with:
-        go-version: 1.19.x
+        go-version: 1.20.x
         cache: true
     - name: Prepare
       run: |
@@ -62,7 +62,7 @@ jobs:
     - name: Setup
       uses: actions/setup-go@v3
       with:
-        go-version: 1.19.x
+        go-version: 1.20.x
         cache: true
     - name: Prepare
       run: |
@@ -80,7 +80,7 @@ jobs:
     - name: Setup
       uses: actions/setup-go@v3
       with:
-        go-version: 1.19.x
+        go-version: 1.20.x
         cache: true
     - name: Prepare # .netrc is used by docker-build, ~/.netrc is used by go test
       run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc

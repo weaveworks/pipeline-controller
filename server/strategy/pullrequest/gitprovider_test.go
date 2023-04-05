@@ -1,12 +1,13 @@
 package pullrequest
 
 import (
-	"github.com/fluxcd/go-git-providers/gitprovider"
+	"testing"
+
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/onsi/gomega"
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/internal/git"
 	"github.com/weaveworks/pipeline-controller/internal/testingutils"
-	"testing"
 )
 
 func Test_gitProviderIsEmpty(t *testing.T) {
@@ -60,7 +61,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 	tests := []struct {
 		name             string
 		in               GitProviderConfig
-		expectedProvider gitprovider.ProviderID
+		expectedProvider string
 		expectedDomain   string
 		errPattern       string
 	}{
@@ -119,7 +120,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				TokenType: "oauth2",
 				Token:     "asdf",
 			},
-			"github",
+			git.GitHubProviderName,
 			"github.com",
 			"",
 		},
@@ -131,8 +132,8 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				Token:     "asdf",
 				Domain:    "github.myenterprise.com",
 			},
-			"github",
-			"github.myenterprise.com",
+			git.GitHubProviderName,
+			"https://github.myenterprise.com",
 			"",
 		},
 		{
@@ -142,8 +143,8 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				TokenType: "oauth2",
 				Token:     "abc",
 			},
-			"gitlab",
-			"https://gitlab.com", //TODO: change me when fixed https://github.com/fluxcd/go-git-providers/issues/175
+			git.GitLabProviderName,
+			"https://gitlab.com",
 			"",
 		},
 		{
@@ -154,8 +155,19 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				Token:     "abc",
 				Domain:    "gitlab.myenterprise.com",
 			},
-			"gitlab",
-			"https://gitlab.myenterprise.com", //TODO: change me when fixed https://github.com/fluxcd/go-git-providers/issues/175
+			git.GitLabProviderName,
+			"https://gitlab.myenterprise.com",
+			"",
+		},
+		{
+			"can create git provider for azure devops",
+			GitProviderConfig{
+				Type:      v1alpha1.AzureDevOps,
+				TokenType: "oauth2",
+				Token:     "abc",
+			},
+			git.GitHubProviderName,
+			"", // There is no "SupportedDomain" for jenkins-x/go-scm.
 			"",
 		},
 	}
@@ -168,7 +180,8 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				g.Expect(err).To(gomega.MatchError(gomega.MatchRegexp(tt.errPattern)))
 			} else {
 				g.Expect(err).To(gomega.BeNil())
-				g.Expect(client.ProviderID()).To(gomega.Equal(tt.expectedProvider))
+				g.Expect(client.Name()).To(gomega.BeAssignableToTypeOf(tt.expectedProvider))
+				// TODO?
 				g.Expect(client.SupportedDomain()).To(gomega.Equal(tt.expectedDomain))
 			}
 		})

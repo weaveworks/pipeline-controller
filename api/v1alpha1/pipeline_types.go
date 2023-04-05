@@ -96,6 +96,7 @@ const (
 	Github          GitProviderType = "github"
 	Gitlab          GitProviderType = "gitlab"
 	BitBucketServer GitProviderType = "bitbucket-server"
+	AzureDevOps     GitProviderType = "azure-devops"
 )
 
 func (g GitProviderType) String() string {
