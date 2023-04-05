@@ -155,7 +155,7 @@ func TestNewGitProviderClientFactory(t *testing.T) {
 				Token:     "abc",
 				Domain:    "gitlab.myenterprise.com",
 			},
-			git.GitHubProviderName,
+			git.GitLabProviderName,
 			"https://gitlab.myenterprise.com",
 			"",
 		},

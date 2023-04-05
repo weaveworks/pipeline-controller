@@ -6,4 +6,4 @@ resources:
 images:
 - name: controller
   newName: ghcr.io/weaveworks/pipeline-controller
-  newTag: v0.0.30-5-g75c5b9f-dirty
+  newTag: latest
