@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v3.5.2
       - name: Import GPG key for signing commits
         run: |
           echo -n "$GPG_SIGNING_KEY" | gpg --import
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v3.5.2
         with:
           repository: weaveworks/weave-gitops-enterprise
           token: ${{ secrets.GHCR_TOKEN }}

@@ -1,6 +1,6 @@
 module github.com/weaveworks/pipeline-controller/api
 
-go 1.19
+go 1.20
 
 require (
 	github.com/fluxcd/pkg/apis/meta v0.17.0
