@@ -214,10 +214,13 @@ e2e: e2e-setup e2e-test e2e-clean
 .PHONY: e2e-setup
 e2e-setup: e2e-kind deploy
 	kubectl wait -n pipeline-system deployment/pipeline-controller --for=condition=available
-	kubectl apply -f e2e/testdata --recursive
+	kubectl apply -k e2e/testdata/pipelines/github
+	kubectl apply -k e2e/testdata/pipelines/gitlab
 
 e2e-kind: docker-build
+ifneq ($(CI), true)
 	kind create cluster --name=pipeline-controller || kubectx kind-pipeline-controller
+endif
 	kind load docker-image --name=pipeline-controller $(IMG)
 	flux install
 
@@ -227,4 +230,9 @@ e2e-test:
 
 .PHONY: e2e-clean
 e2e-clean:
+	kubectl delete -k e2e/testdata/pipelines/github
+	kubectl delete -k e2e/testdata/pipelines/gitlab
+	flux uninstall --silent
+ifneq ($(CI), true)
 	kind delete cluster --name=pipeline-controller
+endif

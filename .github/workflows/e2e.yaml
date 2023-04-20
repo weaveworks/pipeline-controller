@@ -1,6 +1,10 @@
 name: e2e
 
 on:
+  pull_request:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -9,12 +13,33 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3.5.0
-    - name: Setup
+    - name: Setup | Go
       uses: actions/setup-go@v4.0.0
       with:
         go-version: 1.20.x
-    - name: Prepare
+    - name: Setup | Kubernetes Cluster
+      uses: helm/kind-action@v1.5.0
+      with:
+        version: v0.18.0
+        cluster_name: pipeline-controller
+        node_image: kindest/node:v1.26.3@sha256:61b92f38dff6ccc29969e7aa154d34e38b89443af1a2c14e6cfbd2df6419c66f
+    - name: Setup | Flux
+      run: curl -s https://fluxcd.io/install.sh | sudo bash
+    - name: Prepare | Go # .netrc is used by docker-build, ~/.netrc is used by go test
+      run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
+    - name: Prepare | Kubernetes Cluster
       run: |
-        echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" > ~/.netrc 
+        echo "Create flux-system namespace"
+        kubectl create namespace flux-system
+        echo "Adding GitHub promotion credentials"
+        kubectl create secret generic -n flux-system github-promotion-credentials \
+          --from-literal="username=${{ secrets.PROMOTION_GITHUB_USERNAME }}" \
+          --from-literal="password=${{ secrets.PROMOTION_GITHUB_TOKEN }}" \
+          --from-literal="token=${{ secrets.PROMOTION_GITHUB_TOKEN }}"
+        echo "Adding GitLab promotion credentials"
+        kubectl create secret generic -n flux-system gitlab-promotion-credentials \
+          --from-literal="username=${{ secrets.PROMOTION_GITLAB_USERNAME }}" \
+          --from-literal="password=${{ secrets.PROMOTION_GITLAB_TOKEN }}" \
+          --from-literal="token=${{ secrets.PROMOTION_GITLAB_TOKEN }}"
     - name: Run E2E tests
       run: make e2e
