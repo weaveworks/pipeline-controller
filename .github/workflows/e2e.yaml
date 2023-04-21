@@ -24,7 +24,9 @@ jobs:
         cluster_name: pipeline-controller
         node_image: kindest/node:v1.26.3@sha256:61b92f38dff6ccc29969e7aa154d34e38b89443af1a2c14e6cfbd2df6419c66f
     - name: Setup | Flux
-      run: curl -s https://fluxcd.io/install.sh | sudo bash
+      uses: fluxcd/flux2/action@main
+      with:
+        version: 0.41.2
     - name: Prepare | Go # .netrc is used by docker-build, ~/.netrc is used by go test
       run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
     - name: Prepare | Kubernetes Cluster
