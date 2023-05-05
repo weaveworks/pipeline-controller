@@ -14,13 +14,47 @@ rules:
   - list
   - watch
 - apiGroups:
-  - gitops.weave.works
+  - cluster.x-k8s.io
   resources:
-  - gitopsclusters
+  - clusters
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gitops.weave.works
+  resources:
+  - gitopsclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gitops.weave.works
+  resources:
+  - gitopsclusters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - gitops.weave.works
+  resources:
+  - gitopsclusters/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - pipelines.weave.works
   resources:

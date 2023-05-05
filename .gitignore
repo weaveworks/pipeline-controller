@@ -28,3 +28,5 @@ testbin/*
 .netrc
 # helm package with version
 pipeline-controller-*.tgz
+
+.tool-versions

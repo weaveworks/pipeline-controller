@@ -42,7 +42,7 @@ func NewDefaultPromotionHandler(log logr.Logger, stratReg strategy.StrategyRegis
 }
 
 func (h DefaultPromotionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method == http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}

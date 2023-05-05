@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
+
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
+	"github.com/weaveworks/pipeline-controller/pkg/gitopscluster"
+	"github.com/weaveworks/pipeline-controller/pkg/watcher"
 
 	"github.com/weaveworks/pipeline-controller/server/strategy/pullrequest"
 
@@ -41,6 +44,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clusterctrlv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(helmv2.AddToScheme(scheme))
 }
 
 func main() {
@@ -106,12 +110,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	restConfigManager := gitopscluster.NewClientsManager()
+
 	if err = controllers.NewPipelineReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		controllerName,
+		restConfigManager,
 	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pipeline")
+		os.Exit(1)
+	}
+
+	if err = controllers.NewGitopsClusterReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		restConfigManager,
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitopsCluster")
 		os.Exit(1)
 	}
 
@@ -146,24 +162,29 @@ func main() {
 	stratReg.Register(pullRequestStrategy)
 	stratReg.Register(notificationStrat)
 
-	promServer, err := server.NewPromotionServer(
-		mgr.GetClient(),
-		server.WithRateLimit(promotionRateLimit, time.Duration(promotionRateLimitIntervalSeconds)*time.Second),
-		server.WithRetry(promotionRetryDelaySeconds, promotionRetryMaxDelaySeconds, promotionRetryFailureThreshold),
-		server.Logger(log.WithName("promotion")),
-		server.ListenAddr(promServerAddr),
-		server.StrategyRegistry(stratReg),
-	)
-	if err != nil {
-		setupLog.Error(err, "failed setting up promotion server")
-		os.Exit(1)
-	}
-	go func() {
-		if err := promServer.Start(ctx); err != nil {
-			setupLog.Error(err, "problem running promotion server")
-			os.Exit(1)
-		}
-	}()
+	watcher := watcher.New(log, mgr.GetClient(), stratReg, restConfigManager)
+	watcher.Start()
+
+	restConfigManager.Add("local", "", ctrl.GetConfigOrDie())
+
+	// promServer, err := server.NewPromotionServer(
+	// 	mgr.GetClient(),
+	// 	server.WithRateLimit(promotionRateLimit, time.Duration(promotionRateLimitIntervalSeconds)*time.Second),
+	// 	server.WithRetry(promotionRetryDelaySeconds, promotionRetryMaxDelaySeconds, promotionRetryFailureThreshold),
+	// 	server.Logger(log.WithName("promotion")),
+	// 	server.ListenAddr(promServerAddr),
+	// 	server.StrategyRegistry(stratReg),
+	// )
+	// if err != nil {
+	// 	setupLog.Error(err, "failed setting up promotion server")
+	// 	os.Exit(1)
+	// }
+	// go func() {
+	// 	if err := promServer.Start(ctx); err != nil {
+	// 		setupLog.Error(err, "problem running promotion server")
+	// 		os.Exit(1)
+	// 	}
+	// }()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
