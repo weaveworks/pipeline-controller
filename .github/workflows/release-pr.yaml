@@ -7,11 +7,16 @@ on:
 jobs:
   pr_release:
     name: Release image on PR comment
-    if: github.event.issue.pull_request
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/make-pr-image')
     runs-on: ubuntu-latest
     steps:
+    - name: Get PR branch
+      uses: xt0rted/pull-request-comment-branch@v2
+      id: comment-branch
     - name: Checkout
       uses: actions/checkout@v3
+      with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
     - name: Setup
       uses: actions/setup-go@v4
       with:
@@ -30,5 +35,4 @@ jobs:
     - name: Prepare # .netrc is used by docker-build, ~/.netrc is used by go test
       run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
     - name: Push to GitHub Container Registry
-      if: contains(github.event.comment.body, '/make-pr-image')
-      run: IMG_TAG=pr-${{github.event.pull_request.number}} make docker-push # defaults to ghcr.io
+      run: IMG_TAG=pr-${{github.event.issue.number}}-${{ steps.comment-branch.outputs.head_ref }} make docker-push # defaults to ghcr.io
