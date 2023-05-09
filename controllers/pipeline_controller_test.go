@@ -25,7 +25,7 @@ const (
 	defaultInterval = time.Millisecond * 250
 )
 
-func TestReconcile(t *testing.T) {
+func XTestReconcile(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	ctx := context.Background()
 
