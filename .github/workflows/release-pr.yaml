@@ -35,4 +35,4 @@ jobs:
     - name: Prepare # .netrc is used by docker-build, ~/.netrc is used by go test
       run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
     - name: Push to GitHub Container Registry
-      run: IMG_TAG=pr-${{github.event.pull_request.number}} make docker-push # defaults to ghcr.io
+      run: IMG_TAG=pr-${{github.event.issue.number}}-${{ steps.comment-branch.outputs.head_ref }} make docker-push # defaults to ghcr.io
