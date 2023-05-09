@@ -1,0 +1,38 @@
+name: Release PR image
+
+on:
+  issue_comment:
+    types: [created, edited, deleted]
+
+jobs:
+  pr_release:
+    name: Release image on PR comment
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/make-pr-image')
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get PR branch
+      uses: xt0rted/pull-request-comment-branch@v1
+      id: comment-branch
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+    - name: Setup
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.20.x
+        cache: true
+    - name: Setup QEMU
+      uses: docker/setup-qemu-action@v2
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GHCR_TOKEN }}
+    - name: Prepare # .netrc is used by docker-build, ~/.netrc is used by go test
+      run: echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" | tee ~/.netrc .netrc
+    - name: Push to GitHub Container Registry
+      run: IMG_TAG=pr-${{github.event.pull_request.number}} make docker-push # defaults to ghcr.io
