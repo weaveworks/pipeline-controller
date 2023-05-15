@@ -137,6 +137,10 @@ func (r *GitopsClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	if cluster.Annotations == nil {
+		cluster.Annotations = map[string]string{}
+	}
+
 	cluster.Annotations[SecretChecksumKey] = secretMd5
 
 	if err := r.Update(ctx, cluster); err != nil {
