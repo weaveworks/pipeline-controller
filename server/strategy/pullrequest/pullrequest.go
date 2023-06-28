@@ -104,25 +104,25 @@ func (g PullRequest) Promote(ctx context.Context, promSpec pipelinev1alpha1.Prom
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine worktree state: %w", err)
 	}
-	if clean {
-		log.Info("nothing to commit")
-		return &strategy.PromotionResult{}, nil
+	if !clean {
+		commit, err := gitClient.Commit(fgit.Commit{
+			Message: "promoting version",
+			Author: fgit.Signature{
+				Name: "Promotion Server",
+				When: time.Now(),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to commit manifests: %w", err)
+		}
+		log.Info("committed patched manifests", "commit", commit)
 	}
-
-	commit, err := gitClient.Commit(fgit.Commit{
-		Message: "promoting version",
-		Author: fgit.Signature{
-			Name: "Promotion Server",
-			When: time.Now(),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to commit manifests: %w", err)
-	}
-	log.Info("committed patched manifests", "commit", commit)
 
 	if err := gitClient.Push(ctx); err != nil {
-		return nil, fmt.Errorf("failed to push changes: %w", err)
+		// I couldn't find a better way to check if it's an "up-to-date" error.
+		if err.Error() != "already up-to-date" {
+			return nil, fmt.Errorf("failed to push changes: %w", err)
+		}
 	}
 	log.Info("pushed promotion branch")
 
