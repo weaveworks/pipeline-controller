@@ -5,7 +5,11 @@ on:
     branches:
       - main
     paths-ignore:
-      - "charts/**" # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+      # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+      - "charts/**"
+      - "docs/**"
+      - "hack/**"
+      - "*.md"
   pull_request_target:
     types:
       - closed

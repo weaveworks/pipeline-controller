@@ -2,6 +2,11 @@ name: e2e
 
 on:
   pull_request:
+    paths-ignore:
+      # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+      - "docs/**"
+      - "hack/**"
+      - "*.md"
   push:
     branches:
       - main
