@@ -8,9 +8,9 @@ One part of this project is an API to define a continuous delivery pipeline. Ple
 
 ## Components
 
-The current solution implements a push model. This means that the controller does not poll the target environments at regular intervals to determine if a deployment has taken place. Instead, it exposes an endpoint that the target environment needs to call, in order to notify the controller of a new deployment. Following that, the controller will look up the next environment that needs to get updated from the Pipeline CR and will initiate a promotion to that environment. Two types of promotions (strategies) are supported right now:
+The current solution implements a push model. This means that the controller does not poll the target environments at regular intervals to determine if a deployment has taken place. Instead, it exposes an endpoint that the target environment needs to call, in order to notify the controller of a new deployment. Following that, the controller will look up the next environment that needs to be updated from the Pipeline CR and will initiate a promotion to that environment. Two types of promotions (strategies) are supported right now:
 - Promotion via a pull request: the controller creates a pull request to update the next environment. A human must review the pull request and, upon merging the PR, Flux (which is running on the target environment) will deploy the application. 
-- Promotion via notification: the controller will send a notification that includes promotion information (environment/version) to the notification controller running on the same cluster. The notification controller will then forward this notification to another system (for example, a GitHub Action) that will do the actual promotion.
+- Promotion via notification: the controller will send a notification that includes promotion information (environment/version) to the notification controller running on the same cluster. The notification controller will then forward this notification to another system (for example a GitHub Action) that will do the actual promotion.
 
 For more details on the mechanics of promotions, please refer to the [promotion](#promotion) section below.
 
@@ -20,9 +20,9 @@ For an overview of all the components needed for a pipeline to work, please refe
 
 ### Limitations
 
-- The current solution expects all the target environments to be specified in the Pipeline CR. Because of this, pipelines that need to target hundreds of environments require a lot of effort from the user to keep the CR up-to-date.
-- The first environment of the pipeline is expected to be set up already before any promotions take place. In fact, the pipelines feature as a whole does very little to help the user establish a full CD pipeline. A better approach would be for the user to describe **what** and **where** and for the pipeline controller to take care of the rest across **all** environments, including the first one.
-- The user faces a lot of additional overhead to ensure that everything is in place for a pipeline to work:
+- The current solution expects all the target environments to be specified in the Pipeline CR. Because of this, pipelines that need to target hundreds of environments require a lot of effort from the user in order to keep the CR up-to-date.
+- The first environment of the pipeline is expected to be set up already before any promotions take place. In fact, the pipelines feature as a whole does very little to help the user establish a full CD pipeline. A better approach would be for the user to describe **what** and **where** and the pipeline controller to take care of the rest across **all** environments, including the first one.
+- The user faces a lot of additional overhead to ensure that everything is in place for a pipeline to work correctly:
   - the endpoint must be publicly exposed via an ingress route in order to be reachable by leaf clusters
   - an Alert/Provider resource must be present in each target environment in order to be able to notify the pipeline controller of a new deployment
   - for the pull request strategy, the user needs to put the markers in the “right” files or the promotion doesn’t work
