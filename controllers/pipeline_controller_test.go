@@ -29,25 +29,33 @@ func TestReconcile(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	ctx := context.Background()
 
-	t.Run("sets cluster not found condition", func(_ *testing.T) {
+	t.Run("sets cluster not found -> unready -> ready condition", func(_ *testing.T) {
 		name := "pipeline-" + rand.String(5)
+		clusterName := "cluster-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
 		pipeline := newPipeline(ctx, g, name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "wrong-cluster",
+				Name:      clusterName,
 				Namespace: ns.Name,
 			},
 		}})
 
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
-
 		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
-
 		events := fetchEventsFor(ns.Name, name)()
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("GetClusterError"))
-		g.Expect(events[0].message).To(ContainSubstring("GitopsCluster.gitops.weave.works \"wrong-cluster\" not found"))
+		g.Expect(events[0].message).To(ContainSubstring(fmt.Sprintf("GitopsCluster.gitops.weave.works %q not found", clusterName)))
+
+		// make an unready cluster and see if it notices
+		gc := testingutils.NewGitopsCluster(ctx, g, k8sClient, clusterName, ns.Name, kubeConfig)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotReadyReason)
+
+		// make the cluster ready, check that the controller is now happy with the pipeline
+		apimeta.SetStatusCondition(&gc.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "test"})
+		g.Expect(k8sClient.Status().Update(ctx, gc)).To(Succeed())
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 	})
 
 	t.Run("sets reconciliation succeeded condition", func(_ *testing.T) {
