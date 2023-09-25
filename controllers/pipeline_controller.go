@@ -74,21 +74,8 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if target.ClusterRef != nil {
 				cluster, err := r.getCluster(ctx, pipeline, *target.ClusterRef)
 				if err != nil {
-					if apierrors.IsNotFound(err) {
-						if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
-							v1alpha1.TargetClusterNotFoundReason); err != nil {
-							return ctrl.Result{}, err
-						}
-						r.emitEventf(
-							&pipeline,
-							corev1.EventTypeWarning,
-							"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s; requeue",
-							pipeline.GetNamespace(), pipeline.GetName(),
-							err,
-						)
-						// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-						return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
-					}
+
+					// emit the event whatever problem there was
 					r.emitEventf(
 						&pipeline,
 						corev1.EventTypeWarning,
@@ -97,6 +84,25 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 						pipeline.GetNamespace(), pipeline.GetName(),
 						err,
 					)
+
+					// not found -- fine, maybe things are happening out of order; make a note and wait until the cluster exists (or something else happens).
+					if apierrors.IsNotFound(err) {
+						if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
+							v1alpha1.TargetClusterNotFoundReason); err != nil {
+							r.emitEventf(
+								&pipeline,
+								corev1.EventTypeWarning,
+								"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s",
+								pipeline.GetNamespace(), pipeline.GetName(),
+								err,
+							)
+							return ctrl.Result{}, err
+						}
+						// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
+						return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+					}
+
+					// some other error -- this _is_ unexpected, so return it to controller-runtime.
 					return ctrl.Result{}, err
 				}
 

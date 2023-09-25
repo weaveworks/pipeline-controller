@@ -46,8 +46,8 @@ func TestReconcile(t *testing.T) {
 
 		events := fetchEventsFor(ns.Name, name)()
 		g.Expect(events).ToNot(BeEmpty())
-		g.Expect(events[0].reason).To(Equal("SetStatusConditionError"))
-		g.Expect(events[0].message).To(ContainSubstring("GitopsCluster.gitops.weave.works \"wrong-cluster\" not found; requeue"))
+		g.Expect(events[0].reason).To(Equal("GetClusterError"))
+		g.Expect(events[0].message).To(ContainSubstring("GitopsCluster.gitops.weave.works \"wrong-cluster\" not found"))
 	})
 
 	t.Run("sets reconciliation succeeded condition", func(_ *testing.T) {
