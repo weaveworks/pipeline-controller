@@ -192,11 +192,11 @@ func (r *PipelineReconciler) getCluster(ctx context.Context, p v1alpha1.Pipeline
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	const (
-		gitopsClusterIndexKey string = ".metadata.gitopsCluster"
+		gitopsClusterIndexKey string = ".spec.environment.ClusterRef" // this is arbitrary, but let's make it suggest what it's indexing.
 	)
 	// Index the Pipelines by the GitopsCluster references they (may) point at.
 	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, gitopsClusterIndexKey,
-		r.indexBy("GitopsCluster")); err != nil {
+		r.indexClusterKind("GitopsCluster")); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
@@ -208,7 +208,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.Pipeline{}).
 		Watches(
 			&source.Kind{Type: &clusterctrlv1alpha1.GitopsCluster{}},
-			handler.EnqueueRequestsFromMapFunc(r.requestsForRevisionChangeOf(gitopsClusterIndexKey)),
+			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
 		).
 		Complete(r)
 }
