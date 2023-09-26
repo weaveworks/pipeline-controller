@@ -185,12 +185,33 @@ func (p *PipelineStatus) setWaitingApproval(env string, waitingApproval WaitingA
 
 type EnvironmentStatus struct {
 	WaitingApproval WaitingApproval `json:"waitingApproval,omitempty"`
+	Targets         []TargetStatus  `json:"targets,omitempty"`
 }
 
 // WaitingApproval holds the environment revision that's currently waiting approval.
 type WaitingApproval struct {
 	// Revision waiting approval.
 	Revision string `json:"revision"`
+}
+
+// ClusterAppReference is a fully-qualified target reference. It holds
+// the namespaced target name and its type, and the cluster reference
+// if the target is in a remote cluster.
+type ClusterAppReference struct {
+	LocalAppReference `json:",inline"`
+	ClusterRef        *CrossNamespaceClusterReference `json:"clusterRef,omitempty"`
+}
+
+// TargetStatus represents the status of an application object.
+type TargetStatus struct {
+	// ClusterAppRef gives the app object reference, and a cluster reference if in a remote cluster
+	ClusterAppRef ClusterAppReference `json:"clusterAppRef"`
+	// Ready is true if the application object is present and healthy, and false otherwise.
+	Ready bool `json:"ready"`
+	// Revision is set if the application object is present and has had a configuration applied, and empty otherwise.
+	Revision string `json:"revision,omitempty"`
+	// Error is set if the application object is not present or not ready, and empty otherwise.
+	Error string `json:"error,omitempty"`
 }
 
 type Environment struct {

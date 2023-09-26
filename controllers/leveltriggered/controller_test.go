@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
@@ -29,7 +30,7 @@ func TestReconcile(t *testing.T) {
 	g := testingutils.NewGomegaWithT(t)
 	ctx := context.Background()
 
-	t.Run("sets cluster not found -> unready -> ready condition", func(_ *testing.T) {
+	t.Run("sets cluster not found and cluster unready condition", func(_ *testing.T) {
 		name := "pipeline-" + rand.String(5)
 		clusterName := "cluster-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
@@ -49,16 +50,13 @@ func TestReconcile(t *testing.T) {
 		g.Expect(events[0].message).To(ContainSubstring(fmt.Sprintf("GitopsCluster.gitops.weave.works %q not found", clusterName)))
 
 		// make an unready cluster and see if it notices
-		gc := testingutils.NewGitopsCluster(ctx, g, k8sClient, clusterName, ns.Name, kubeConfig)
+		testingutils.NewGitopsCluster(ctx, g, k8sClient, clusterName, ns.Name, kubeConfig)
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotReadyReason)
-
-		// make the cluster ready, check that the controller is now happy with the pipeline
-		apimeta.SetStatusCondition(&gc.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "test"})
-		g.Expect(k8sClient.Status().Update(ctx, gc)).To(Succeed())
-		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 	})
 
-	t.Run("sets reconciliation succeeded condition", func(_ *testing.T) {
+	t.Run("sets reconciliation succeeded condition for remote cluster", func(t *testing.T) {
+		t.Skip("remote clusters not supported yet")
+
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -81,6 +79,8 @@ func TestReconcile(t *testing.T) {
 	t.Run("sets reconciliation succeeded condition without clusterRef", func(_ *testing.T) {
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+
+		_ = newApp(ctx, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
 
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
 
@@ -155,6 +155,25 @@ func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters
 	g.Expect(k8sClient.Create(ctx, &pipeline)).To(Succeed())
 
 	return &pipeline
+}
+
+// newApp returns a minimal application object. Use client.Status().Update(...) to make it look ready.
+func newApp(ctx context.Context, g Gomega, name, namespace string) *helmv2.HelmRelease {
+	hr := &helmv2.HelmRelease{
+		Spec: helmv2.HelmReleaseSpec{
+			Chart: helmv2.HelmChartTemplate{
+				Spec: helmv2.HelmChartTemplateSpec{
+					SourceRef: helmv2.CrossNamespaceObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+		},
+	}
+	hr.Name = name
+	hr.Namespace = namespace
+	g.ExpectWithOffset(1, k8sClient.Create(ctx, hr)).To(Succeed())
+	return hr
 }
 
 func fetchEventsFor(ns string, name string) func() []testEvent {

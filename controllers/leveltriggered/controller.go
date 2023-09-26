@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -64,10 +65,21 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	envStatuses := map[string]*v1alpha1.EnvironmentStatus{}
+	var unready bool
+
 	for _, env := range pipeline.Spec.Environments {
-		for _, target := range env.Targets {
+		var envStatus v1alpha1.EnvironmentStatus
+		envStatus.Targets = make([]v1alpha1.TargetStatus, len(env.Targets))
+
+		for i, target := range env.Targets {
+			targetStatus := &envStatus.Targets[i]
+			targetStatus.ClusterAppRef.LocalAppReference = pipeline.Spec.AppRef
+
 			// check cluster only if ref is defined
 			if target.ClusterRef != nil {
+				targetStatus.ClusterAppRef.ClusterRef = target.ClusterRef
+
 				cluster, err := r.getCluster(ctx, pipeline, *target.ClusterRef)
 				if err != nil {
 
@@ -94,8 +106,10 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 							)
 							return ctrl.Result{}, err
 						}
-						// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-						return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+
+						targetStatus.Error = err.Error()
+						unready = true
+						continue
 					}
 
 					// some other error -- this _is_ unexpected, so return it to controller-runtime.
@@ -103,11 +117,8 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				}
 
 				if !conditions.IsReady(cluster.Status.Conditions) {
-					err := r.setStatusCondition(
-						ctx, pipeline,
-						fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
-						v1alpha1.TargetClusterNotReadyReason,
-					)
+					msg := fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String())
+					err := r.setStatusCondition(ctx, pipeline, msg, v1alpha1.TargetClusterNotReadyReason)
 					if err != nil {
 						r.emitEventf(
 							&pipeline,
@@ -118,21 +129,45 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 						)
 						return ctrl.Result{}, err
 					}
-					// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-					return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+					targetStatus.Error = msg
+					unready = true
+					continue
 				}
 			}
+
+			// look up the actual application
+			var app helmv2.HelmRelease // FIXME this can be other kinds!
+			appKey := targetObjectKey(&pipeline, &target)
+			err := r.Get(ctx, appKey, &app)
+			if err != nil {
+				targetStatus.Error = err.Error()
+				unready = true
+				continue
+			}
+			setTargetStatus(targetStatus, &app)
 		}
 	}
 
-	newCondition := metav1.Condition{
-		Type:    conditions.ReadyCondition,
-		Status:  metav1.ConditionTrue,
-		Reason:  v1alpha1.ReconciliationSucceededReason,
-		Message: trimString("All clusters checked", v1alpha1.MaxConditionMessageLength),
+	var readyCondition metav1.Condition
+	if unready {
+		readyCondition = metav1.Condition{
+			Type:    conditions.ReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  v1alpha1.TargetClusterNotReadyReason,
+			Message: "One or more targets was not ready",
+		}
+	} else {
+		readyCondition = metav1.Condition{
+			Type:    conditions.ReadyCondition,
+			Status:  metav1.ConditionTrue,
+			Reason:  v1alpha1.ReconciliationSucceededReason,
+			Message: trimString("All clusters checked", v1alpha1.MaxConditionMessageLength),
+		}
 	}
+
 	pipeline.Status.ObservedGeneration = pipeline.Generation
-	apimeta.SetStatusCondition(&pipeline.Status.Conditions, newCondition)
+	apimeta.SetStatusCondition(&pipeline.Status.Conditions, readyCondition)
+	pipeline.Status.Environments = envStatuses
 	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
 		r.emitEventf(
 			&pipeline,
@@ -151,6 +186,20 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	)
 
 	return ctrl.Result{}, nil
+}
+
+// targetObjectKey returns the object key (namespaced name) for a target. The Pipeline is passed in as well as the Target, since the definition can be spread between these specs.
+func targetObjectKey(pipeline *v1alpha1.Pipeline, target *v1alpha1.Target) client.ObjectKey {
+	key := client.ObjectKey{}
+	key.Name = pipeline.Spec.AppRef.Name
+	key.Namespace = target.Namespace
+	return key
+}
+
+// setTargetStatus gets the relevant status from the app object given, and records it in the TargetStatus.
+func setTargetStatus(status *v1alpha1.TargetStatus, target *helmv2.HelmRelease) {
+	status.Revision = target.Status.LastAppliedRevision
+	status.Ready = conditions.IsReady(target.Status.Conditions)
 }
 
 func (r *PipelineReconciler) setStatusCondition(ctx context.Context, p v1alpha1.Pipeline, msg, reason string) error {
