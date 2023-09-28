@@ -42,7 +42,7 @@ func TestReconcile(t *testing.T) {
 			},
 		}})
 
-		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotFoundReason)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
 		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
 		events := fetchEventsFor(ns.Name, name)()
 		g.Expect(events).ToNot(BeEmpty())
@@ -51,7 +51,7 @@ func TestReconcile(t *testing.T) {
 
 		// make an unready cluster and see if it notices
 		testingutils.NewGitopsCluster(ctx, g, k8sClient, clusterName, ns.Name, kubeConfig)
-		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetClusterNotReadyReason)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
 	})
 
 	t.Run("sets reconciliation succeeded condition for remote cluster", func(t *testing.T) {
@@ -92,6 +92,16 @@ func TestReconcile(t *testing.T) {
 		g.Expect(events).ToNot(BeEmpty())
 		g.Expect(events[0].reason).To(Equal("Updated"))
 		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
+	})
+
+	t.Run("app status is recorded faithfully", func(t *testing.T) {
+		name := "pipeline-" + rand.String(5)
+		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
+
+		_ = newApp(ctx, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
+		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 	})
 }
 

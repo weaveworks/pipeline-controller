@@ -95,18 +95,6 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 					// not found -- fine, maybe things are happening out of order; make a note and wait until the cluster exists (or something else happens).
 					if apierrors.IsNotFound(err) {
-						if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
-							v1alpha1.TargetClusterNotFoundReason); err != nil {
-							r.emitEventf(
-								&pipeline,
-								corev1.EventTypeWarning,
-								"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s",
-								pipeline.GetNamespace(), pipeline.GetName(),
-								err,
-							)
-							return ctrl.Result{}, err
-						}
-
 						targetStatus.Error = err.Error()
 						unready = true
 						continue
@@ -118,17 +106,6 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 				if !conditions.IsReady(cluster.Status.Conditions) {
 					msg := fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String())
-					err := r.setStatusCondition(ctx, pipeline, msg, v1alpha1.TargetClusterNotReadyReason)
-					if err != nil {
-						r.emitEventf(
-							&pipeline,
-							corev1.EventTypeWarning,
-							"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s",
-							pipeline.GetNamespace(), pipeline.GetName(),
-							err,
-						)
-						return ctrl.Result{}, err
-					}
 					targetStatus.Error = msg
 					unready = true
 					continue
@@ -140,6 +117,15 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			appKey := targetObjectKey(&pipeline, &target)
 			err := r.Get(ctx, appKey, &app)
 			if err != nil {
+				r.emitEventf(
+					&pipeline,
+					corev1.EventTypeWarning,
+					"GetAppError", "Failed to get application object %s%s/%s for pipeline %s/%s: %s",
+					clusterPrefix(target.ClusterRef), appKey.Namespace, appKey.Name,
+					pipeline.GetNamespace(), pipeline.GetName(),
+					err,
+				)
+
 				targetStatus.Error = err.Error()
 				unready = true
 				continue
@@ -153,8 +139,8 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		readyCondition = metav1.Condition{
 			Type:    conditions.ReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  v1alpha1.TargetClusterNotReadyReason,
-			Message: "One or more targets was not ready",
+			Reason:  v1alpha1.TargetNotReadableReason,
+			Message: "One or more targets was not reachable or not present",
 		}
 	} else {
 		readyCondition = metav1.Condition{
@@ -196,25 +182,18 @@ func targetObjectKey(pipeline *v1alpha1.Pipeline, target *v1alpha1.Target) clien
 	return key
 }
 
+// clusterPrefix returns a string naming the cluster containing an app, to prepend to the usual namespace/name format of the app object itself. So that it can be empty, the separator is include in the return value.
+func clusterPrefix(ref *v1alpha1.CrossNamespaceClusterReference) string {
+	if ref == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s:", ref.Namespace, ref.Name)
+}
+
 // setTargetStatus gets the relevant status from the app object given, and records it in the TargetStatus.
 func setTargetStatus(status *v1alpha1.TargetStatus, target *helmv2.HelmRelease) {
 	status.Revision = target.Status.LastAppliedRevision
 	status.Ready = conditions.IsReady(target.Status.Conditions)
-}
-
-func (r *PipelineReconciler) setStatusCondition(ctx context.Context, p v1alpha1.Pipeline, msg, reason string) error {
-	newCondition := metav1.Condition{
-		Type:    conditions.ReadyCondition,
-		Status:  metav1.ConditionFalse,
-		Reason:  reason,
-		Message: trimString(msg, v1alpha1.MaxConditionMessageLength),
-	}
-	p.Status.ObservedGeneration = p.Generation
-	apimeta.SetStatusCondition(&p.Status.Conditions, newCondition)
-	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&p), p.Status); err != nil {
-		return fmt.Errorf("failed patching Pipeline: %w", err)
-	}
-	return nil
 }
 
 func (r *PipelineReconciler) patchStatus(ctx context.Context, n types.NamespacedName, newStatus v1alpha1.PipelineStatus) error {
