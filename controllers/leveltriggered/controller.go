@@ -76,13 +76,17 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			targetStatus := &envStatus.Targets[i]
 			targetStatus.ClusterAppRef.LocalAppReference = pipeline.Spec.AppRef
 
-			// check cluster only if ref is defined
+			var clusterObject *clusterctrlv1alpha1.GitopsCluster
 			if target.ClusterRef != nil {
+				// record the fact of the remote cluster in the target status
 				targetStatus.ClusterAppRef.ClusterRef = target.ClusterRef
 
-				cluster, err := r.getCluster(ctx, pipeline, *target.ClusterRef)
-				if err != nil {
+				// even though we could just get the client from our list of clients, we check that the cluster object exists
+				// every time. We might have been queued because of a cluster disappearing.
 
+				var err error
+				clusterObject, err = r.getCluster(ctx, pipeline, *target.ClusterRef)
+				if err != nil {
 					// emit the event whatever problem there was
 					r.emitEventf(
 						&pipeline,
@@ -104,7 +108,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 					return ctrl.Result{}, err
 				}
 
-				if !conditions.IsReady(cluster.Status.Conditions) {
+				if !conditions.IsReady(clusterObject.Status.Conditions) {
 					msg := fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String())
 					targetStatus.Error = msg
 					unready = true
@@ -112,10 +116,16 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				}
 			}
 
+			// it's OK if this is `nil` -- that represents the local cluster.
+			clusterClient, err := r.getClusterClient(clusterObject)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
 			// look up the actual application
 			var app helmv2.HelmRelease // FIXME this can be other kinds!
 			appKey := targetObjectKey(&pipeline, &target)
-			err := r.Get(ctx, appKey, &app)
+			err = clusterClient.Get(ctx, appKey, &app)
 			if err != nil {
 				r.emitEventf(
 					&pipeline,
@@ -172,6 +182,15 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	)
 
 	return ctrl.Result{}, nil
+}
+
+// getClusterClient retrieves or creates a client for the cluster in question. A `nil` value for the argument indicates the local cluster.
+func (r *PipelineReconciler) getClusterClient(cluster *clusterctrlv1alpha1.GitopsCluster) (client.Client, error) {
+	if cluster == nil {
+		return r.Client, nil
+	}
+	// TODO future: get the secret via the cluster object, connect to remote cluster
+	return nil, fmt.Errorf("remote clusters not supported yet")
 }
 
 // targetObjectKey returns the object key (namespaced name) for a target. The Pipeline is passed in as well as the Target, since the definition can be spread between these specs.
