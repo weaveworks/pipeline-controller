@@ -230,6 +230,11 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
+	// Index the Pipelines by the application references they point at.
+	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, applicationKey /* <- from indexing.go */, r.indexApplication); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
 	if r.recorder == nil {
 		r.recorder = mgr.GetEventRecorderFor(r.ControllerName)
 	}
@@ -239,6 +244,10 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &clusterctrlv1alpha1.GitopsCluster{}},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
+		).
+		Watches(
+			&source.Kind{Type: &helmv2.HelmRelease{}},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForApplication),
 		).
 		Complete(r)
 }

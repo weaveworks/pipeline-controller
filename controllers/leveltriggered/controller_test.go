@@ -151,8 +151,9 @@ func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters
 		},
 		Spec: v1alpha1.PipelineSpec{
 			AppRef: v1alpha1.LocalAppReference{
-				Kind: "HelmRelease",
-				Name: name,
+				APIVersion: "helm.toolkit.fluxcd.io/v2beta1",
+				Kind:       "HelmRelease",
+				Name:       name,
 			},
 			Environments: []v1alpha1.Environment{
 				{
