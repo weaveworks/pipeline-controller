@@ -133,13 +133,13 @@ func TestMain(m *testing.M) {
 
 	eventRecorder = &testEventRecorder{events: map[string][]testEvent{}}
 
-	pipelineReconciler = &PipelineReconciler{
-		Client:       k8sManager.GetClient(),
-		Scheme:       scheme.Scheme,
-		targetScheme: scheme.Scheme,
-		recorder:     eventRecorder,
-		stratReg:     strategy.StrategyRegistry{},
-	}
+	pipelineReconciler = NewPipelineReconciler(
+		k8sManager.GetClient(),
+		scheme.Scheme,
+		"pipelines",
+		eventRecorder,
+		strategy.StrategyRegistry{},
+	)
 	err = pipelineReconciler.SetupWithManager(k8sManager)
 	if err != nil {
 		log.Fatalf("setup pipeline controller failed: %s", err)

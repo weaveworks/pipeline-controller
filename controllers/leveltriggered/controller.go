@@ -33,13 +33,14 @@ type PipelineReconciler struct {
 	stratReg       strategy.StrategyRegistry
 }
 
-func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, stratReg strategy.StrategyRegistry) *PipelineReconciler {
+func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, eventRecorder record.EventRecorder, stratReg strategy.StrategyRegistry) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
 
 	return &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
 		targetScheme:   targetScheme,
+		recorder:       eventRecorder,
 		ControllerName: controllerName,
 		stratReg:       stratReg,
 	}

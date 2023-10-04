@@ -137,6 +137,7 @@ func main() {
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			controllerName,
+			eventRecorder,
 			stratReg,
 		).SetupWithManager(mgr)
 	} else {
