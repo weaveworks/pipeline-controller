@@ -100,9 +100,41 @@ func TestReconcile(t *testing.T) {
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
 
-		_ = newApp(ctx, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
+		hr := newApp(ctx, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
 		checkReadyCondition(ctx, g, client.ObjectKeyFromObject(pipeline), metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+
+		// we didn't set the app to be ready, so we should expect the target to be reported as unready
+		p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+		g.Expect(getTargetStatus(g, p, "test", 0).Ready).NotTo(BeTrue())
+
+		// make the app ready, and check it's recorded as such in the pipeline status
+		const appRevision = "v1.0.1"
+		hr.Status.LastAppliedRevision = appRevision
+		apimeta.SetStatusCondition(&hr.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "test"})
+		g.Expect(k8sClient.Status().Update(ctx, hr)).To(Succeed())
+
+		var targetStatus v1alpha1.TargetStatus
+		g.Eventually(func() bool {
+			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+			targetStatus = getTargetStatus(g, p, "test", 0)
+			return targetStatus.Ready
+		}, "5s", "0.2s").Should(BeTrue())
+		g.Expect(targetStatus.Revision).To(Equal(appRevision))
 	})
+}
+
+func getPipeline(ctx context.Context, g Gomega, key client.ObjectKey) *v1alpha1.Pipeline {
+	var p v1alpha1.Pipeline
+	g.Expect(k8sClient.Get(ctx, key, &p)).To(Succeed())
+	return &p
+}
+
+func getTargetStatus(g Gomega, pipeline *v1alpha1.Pipeline, envName string, target int) v1alpha1.TargetStatus {
+	g.ExpectWithOffset(1, pipeline.Status).NotTo(BeNil())
+	g.ExpectWithOffset(1, pipeline.Status.Environments).To(HaveKey(envName))
+	env := pipeline.Status.Environments[envName]
+	g.ExpectWithOffset(1, len(env.Targets) > target).To(BeTrue())
+	return env.Targets[target]
 }
 
 func checkReadyCondition(ctx context.Context, g Gomega, n types.NamespacedName, status metav1.ConditionStatus, reason string) {

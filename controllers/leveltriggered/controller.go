@@ -71,6 +71,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	for _, env := range pipeline.Spec.Environments {
 		var envStatus v1alpha1.EnvironmentStatus
 		envStatus.Targets = make([]v1alpha1.TargetStatus, len(env.Targets))
+		envStatuses[env.Name] = &envStatus
 
 		for i, target := range env.Targets {
 			targetStatus := &envStatus.Targets[i]
