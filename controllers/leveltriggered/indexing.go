@@ -67,7 +67,10 @@ func (r *PipelineReconciler) requestsForCluster(indexKey string) func(context.Co
 const applicationKey = ".spec.environments[].targets[].appRef"
 
 // indexApplication extracts all the application refs from a pipeline. The index keys are
-// `<group>/<kind>/<namespace>/<name>`.
+//
+//	<cluster namespace>/<cluster name>:<group>/<kind>/<namespace>/<name>`.
+//
+// If a target refers to a cluster without giving a namespace, it's defaulted to the pipeline object's namespace.
 func (r *PipelineReconciler) indexApplication(o client.Object) []string {
 	p, ok := o.(*v1alpha1.Pipeline)
 	if !ok {
@@ -87,42 +90,44 @@ func (r *PipelineReconciler) indexApplication(o client.Object) []string {
 	var res []string
 	for _, env := range p.Spec.Environments {
 		for _, target := range env.Targets {
+			var clusterName, clusterNamespace string
+			if target.ClusterRef != nil {
+				clusterName = target.ClusterRef.Name
+				clusterNamespace = target.ClusterRef.Namespace
+				if clusterNamespace == "" {
+					clusterNamespace = p.GetNamespace()
+				}
+			}
+
 			namespace := target.Namespace
 			if namespace == "" {
 				namespace = p.GetNamespace()
 			}
-			key := fmt.Sprintf("%s/%s/%s/%s", gv.Group, kind, namespace, name)
+			key := fmt.Sprintf("%s/%s:%s/%s/%s/%s", clusterNamespace, clusterName, gv.Group, kind, namespace, name)
 			res = append(res, key)
 		}
 	}
 	return res
 }
 
-// requestsForApplication is given an application object, and looks up the pipeline(s) that use it as a target,
-// assuming they are indexed using indexApplication (or something using the same key format and index).
-func (r *PipelineReconciler) requestsForApplication(ctx context.Context, obj client.Object) []reconcile.Request {
+// pipelinesForApplication is given an application object and its cluster, and looks up the pipeline(s) that use it as a target.
+// It assumes applications are indexed using `indexApplication(...)` (or something using the same key format and index).
+// `clusterName` can be a zero value, but if it's not, both the namespace and name should be supplied (since the namespace will
+// be give a value if there's only a name supplied, when indexing. See `indexApplication()`).
+func (r *PipelineReconciler) pipelinesForApplication(clusterName client.ObjectKey, obj client.Object) ([]v1alpha1.Pipeline, error) {
+	ctx := context.Background()
 	var list v1alpha1.PipelineList
 	gvk, err := apiutil.GVKForObject(obj, r.Scheme)
 	if err != nil {
-		// FIXME: it'd be good to log here, would require saving a logger in the reconciler, or having it in the closure.
-		return nil
+		return nil, err
 	}
 
-	key := fmt.Sprintf("%s/%s/%s/%s", gvk.Group, gvk.Kind, obj.GetNamespace(), obj.GetName())
+	key := fmt.Sprintf("%s/%s:%s/%s/%s/%s", clusterName.Namespace, clusterName.Name, gvk.Group, gvk.Kind, obj.GetNamespace(), obj.GetName())
 	if err := r.List(ctx, &list, client.MatchingFields{
 		applicationKey: key,
 	}); err != nil {
-		return nil
+		return nil, err
 	}
 
-	if len(list.Items) == 0 {
-		return nil
-	}
-
-	reqs := make([]reconcile.Request, len(list.Items))
-	for i := range list.Items {
-		reqs[i].Name = list.Items[i].Name
-		reqs[i].Namespace = list.Items[i].Namespace
-	}
-	return reqs
+	return list.Items, nil
 }

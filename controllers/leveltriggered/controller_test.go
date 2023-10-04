@@ -7,6 +7,8 @@ import (
 	"time"
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
+	kustomv1 "github.com/fluxcd/kustomize-controller/api/v1"
+
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
@@ -38,12 +40,13 @@ func TestReconcile(t *testing.T) {
 		clusterName := "cluster-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
-		pipeline := newPipeline(ctx, g, name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{{
+		pipeline := newPipeline(name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName,
 				Namespace: ns.Name,
 			},
 		}})
+		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
 
 		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
 		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
@@ -57,37 +60,15 @@ func TestReconcile(t *testing.T) {
 		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
 	})
 
-	t.Run("sets reconciliation succeeded condition for remote cluster", func(t *testing.T) {
-		g := testingutils.NewGomegaWithT(t)
-		t.Skip("remote clusters not supported yet")
-
-		name := "pipeline-" + rand.String(5)
-		ns := testingutils.NewNamespace(ctx, g, k8sClient)
-
-		gc := testingutils.NewGitopsCluster(ctx, g, k8sClient, name, ns.Name, kubeConfig)
-		apimeta.SetStatusCondition(&gc.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "test"})
-		g.Expect(k8sClient.Status().Update(ctx, gc)).To(Succeed())
-
-		pipeline := newPipeline(ctx, g, name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{gc})
-
-		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
-
-		g.Eventually(fetchEventsFor(ns.Name, name), time.Second, time.Millisecond*100).Should(Not(BeEmpty()))
-
-		events := fetchEventsFor(ns.Name, name)()
-		g.Expect(events).ToNot(BeEmpty())
-		g.Expect(events[0].reason).To(Equal("Updated"))
-		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
-	})
-
 	t.Run("sets reconciliation succeeded condition without clusterRef", func(t *testing.T) {
 		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
-		_ = newApp(ctx, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
+		_ = createApp(ctx, k8sClient, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
 
-		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
+		pipeline := newPipeline(name, ns.Name, nil)
+		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
 
 		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 
@@ -103,10 +84,12 @@ func TestReconcile(t *testing.T) {
 		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
-		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
+		pipeline := newPipeline(name, ns.Name, nil)
+		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
+
 		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
 
-		hr := newApp(ctx, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
+		hr := createApp(ctx, k8sClient, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
 		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
 
 		// we didn't set the app to be ready, so we should expect the target to be reported as unready
@@ -179,13 +162,13 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 
-		devApp := newApp(ctx, g, name, devNs.Name)
+		devApp := createApp(ctx, k8sClient, g, name, devNs.Name)
 		setAppRevisionAndReadyStatus(ctx, g, devApp, "v1.0.0")
 
-		stagingApp := newApp(ctx, g, name, stagingNs.Name)
+		stagingApp := createApp(ctx, k8sClient, g, name, stagingNs.Name)
 		setAppRevisionAndReadyStatus(ctx, g, stagingApp, "v1.0.0")
 
-		prodApp := newApp(ctx, g, name, prodNs.Name)
+		prodApp := createApp(ctx, k8sClient, g, name, prodNs.Name)
 		setAppRevisionAndReadyStatus(ctx, g, prodApp, "v1.0.0")
 
 		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
@@ -292,12 +275,12 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 
-		devApp := newApp(ctx, g, name, devNs.Name)
+		devApp := createApp(ctx, k8sClient, g, name, devNs.Name)
 		setAppRevisionAndReadyStatus(ctx, g, devApp, "v1.0.0")
 
-		devApp2 := newApp(ctx, g, name, devNs2.Name)
+		devApp2 := createApp(ctx, k8sClient, g, name, devNs2.Name)
 
-		stagingApp := newApp(ctx, g, name, stagingNs.Name)
+		stagingApp := createApp(ctx, k8sClient, g, name, stagingNs.Name)
 		setAppRevisionAndReadyStatus(ctx, g, stagingApp, "v1.0.0")
 
 		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
@@ -314,6 +297,63 @@ func TestReconcile(t *testing.T) {
 			return apimeta.FindStatusCondition(p.Status.Conditions, pipelineconditions.PromotionPendingCondition) == nil
 		}).Should(BeTrue())
 	})
+
+	t.Run("works with a Kustomization", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
+		ctx := context.TODO()
+
+		const appRevision = "1.0.1"
+
+		name := "pipeline-" + rand.String(5)
+		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+
+		pipeline := newPipeline(name, ns.Name, nil)
+		pipeline.Spec.AppRef.APIVersion = "kustomize.toolkit.fluxcd.io/v1"
+		pipeline.Spec.AppRef.Kind = "Kustomization"
+		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
+
+		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionFalse, v1alpha1.TargetNotReadableReason)
+
+		// the application hasn't been created, so we expect "not found"
+		p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+		g.Expect(getTargetStatus(g, p, "test", 0).Ready).NotTo(BeTrue())
+		g.Expect(getTargetStatus(g, p, "test", 0).Error).To(ContainSubstring("not found"))
+
+		// FIXME create the app
+		app := kustomv1.Kustomization{
+			Spec: kustomv1.KustomizationSpec{
+				SourceRef: kustomv1.CrossNamespaceSourceReference{
+					Kind: "OCIRepository",
+					Name: "dummy",
+				},
+			},
+		}
+		app.Name = name
+		app.Namespace = ns.Name
+		g.Expect(k8sClient.Create(ctx, &app)).To(Succeed())
+
+		// now it's there, the pipeline can be reconciled fully
+		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+		// .. and the target status will be unready, but no error
+		p = getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+		g.Expect(getTargetStatus(g, p, "test", 0).Ready).NotTo(BeTrue())
+		g.Expect(getTargetStatus(g, p, "test", 0).Error).To(BeEmpty())
+
+		app.Status.LastAppliedRevision = appRevision
+		apimeta.SetStatusCondition(&app.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "test"})
+		g.Expect(k8sClient.Status().Update(ctx, &app)).To(Succeed())
+
+		var targetStatus v1alpha1.TargetStatus
+		g.Eventually(func() bool {
+			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+			targetStatus = getTargetStatus(g, p, "test", 0)
+			return targetStatus.Ready
+		}, "5s", "0.2s").Should(BeTrue())
+		g.Expect(targetStatus.Revision).To(Equal(appRevision))
+
+		// TODO possibly: check the events too, as it used to.
+	})
+
 }
 
 func setAppRevisionAndReadyStatus(ctx context.Context, g Gomega, hr *helmv2.HelmRelease, revision string) {
@@ -379,7 +419,9 @@ func checkCondition(ctx context.Context, g Gomega, n types.NamespacedName, condi
 	assrt.Should(conditions.MatchCondition(cond))
 }
 
-func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters []*clusterctrlv1alpha1.GitopsCluster) *v1alpha1.Pipeline {
+// newPipeline creates a new pipeline value using the name and namespace given, and HelmRelease targets in the clusters given;
+// or if no clusters are supplied, one target in the same namespace as the pipeline.
+func newPipeline(name string, ns string, clusters []*clusterctrlv1alpha1.GitopsCluster) *v1alpha1.Pipeline {
 	targets := []v1alpha1.Target{}
 
 	if len(clusters) > 0 {
@@ -418,13 +460,13 @@ func newPipeline(ctx context.Context, g Gomega, name string, ns string, clusters
 			},
 		},
 	}
-	g.Expect(k8sClient.Create(ctx, &pipeline)).To(Succeed())
 
 	return &pipeline
 }
 
-// newApp returns a minimal application object. Use client.Status().Update(...) to make it look ready.
-func newApp(ctx context.Context, g Gomega, name, namespace string) *helmv2.HelmRelease {
+// createApp creates a minimal application object using the client given, and returns a pointer to the object.
+// Use client.Status().Update(...) to make it look ready.
+func createApp(ctx context.Context, client client.Client, g Gomega, name, namespace string) *helmv2.HelmRelease {
 	hr := &helmv2.HelmRelease{
 		Spec: helmv2.HelmReleaseSpec{
 			Chart: helmv2.HelmChartTemplate{
@@ -438,7 +480,7 @@ func newApp(ctx context.Context, g Gomega, name, namespace string) *helmv2.HelmR
 	}
 	hr.Name = name
 	hr.Namespace = namespace
-	g.ExpectWithOffset(1, k8sClient.Create(ctx, hr)).To(Succeed())
+	g.ExpectWithOffset(1, client.Create(ctx, hr)).To(Succeed())
 	return hr
 }
 
