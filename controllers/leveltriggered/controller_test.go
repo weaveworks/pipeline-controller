@@ -30,10 +30,10 @@ const (
 )
 
 func TestReconcile(t *testing.T) {
-	g := testingutils.NewGomegaWithT(t)
 	ctx := context.Background()
 
-	t.Run("sets cluster not found and cluster unready condition", func(_ *testing.T) {
+	t.Run("sets cluster not found and cluster unready condition", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		clusterName := "cluster-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
@@ -58,6 +58,7 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("sets reconciliation succeeded condition for remote cluster", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
 		t.Skip("remote clusters not supported yet")
 
 		name := "pipeline-" + rand.String(5)
@@ -79,7 +80,8 @@ func TestReconcile(t *testing.T) {
 		g.Expect(events[0].message).To(ContainSubstring("Updated pipeline"))
 	})
 
-	t.Run("sets reconciliation succeeded condition without clusterRef", func(_ *testing.T) {
+	t.Run("sets reconciliation succeeded condition without clusterRef", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 
@@ -98,6 +100,7 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("app status is recorded faithfully", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
 		pipeline := newPipeline(ctx, g, name, ns.Name, nil)
@@ -126,6 +129,7 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("promotes revision to all environments", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
 		mockStrategy := setStrategyRegistry(t, pipelineReconciler)
 		mockStrategy.EXPECT().Handles(gomock.Any()).Return(true).AnyTimes()
 
@@ -243,6 +247,7 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("sets PipelinePending condition", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
 		mockStrategy := setStrategyRegistry(t, pipelineReconciler)
 		mockStrategy.EXPECT().Handles(gomock.Any()).Return(true).AnyTimes()
 
@@ -351,7 +356,7 @@ func getTargetStatus(g Gomega, pipeline *v1alpha1.Pipeline, envName string, targ
 
 func checkCondition(ctx context.Context, g Gomega, n types.NamespacedName, conditionType string, status metav1.ConditionStatus, reason string) {
 	pipeline := &v1alpha1.Pipeline{}
-	assrt := g.Eventually(func() metav1.Condition {
+	assrt := g.EventuallyWithOffset(1, func() metav1.Condition {
 		err := k8sClient.Get(ctx, n, pipeline)
 		if err != nil {
 			return metav1.Condition{}
