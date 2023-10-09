@@ -9,7 +9,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func (r *PipelineReconciler) indexBy(kind string) func(o client.Object) []string {
+// indexClusterKind returns a func that will extract all the cluster
+// refs of the kind given, from a pipeline. This func can be supplied
+// to `clientCache.IndexField`. The index values are
+// `<namespace>/<name>`; if you index more than one kind, use a
+// different key.
+func (r *PipelineReconciler) indexClusterKind(kind string) func(o client.Object) []string {
 	return func(o client.Object) []string {
 		p, ok := o.(*v1alpha1.Pipeline)
 		if !ok {
@@ -28,28 +33,27 @@ func (r *PipelineReconciler) indexBy(kind string) func(o client.Object) []string
 				}
 			}
 		}
-
 		return res
 	}
 }
 
-func (r *PipelineReconciler) requestsForRevisionChangeOf(indexKey string) func(obj client.Object) []reconcile.Request {
+// requestsForCluster returns a func that will look up the pipelines
+// using a cluster, as indexed by `indexClusterKind`.
+func (r *PipelineReconciler) requestsForCluster(indexKey string) func(obj client.Object) []reconcile.Request {
 	return func(obj client.Object) []reconcile.Request {
 		ctx := context.Background()
 		var list v1alpha1.PipelineList
+		key := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 		if err := r.List(ctx, &list, client.MatchingFields{
-			indexKey: client.ObjectKeyFromObject(obj).String(),
+			indexKey: key,
 		}); err != nil {
 			return nil
 		}
-		var dd []*v1alpha1.Pipeline
-		for _, d := range list.Items {
-			dd = append(dd, d.DeepCopy())
-		}
-		reqs := make([]reconcile.Request, len(dd))
-		for i := range dd {
-			reqs[i].NamespacedName.Name = dd[i].Name
-			reqs[i].NamespacedName.Namespace = dd[i].Namespace
+
+		reqs := make([]reconcile.Request, len(list.Items))
+		for i := range list.Items {
+			reqs[i].Name = list.Items[i].Name
+			reqs[i].Namespace = list.Items[i].Namespace
 		}
 		return reqs
 	}

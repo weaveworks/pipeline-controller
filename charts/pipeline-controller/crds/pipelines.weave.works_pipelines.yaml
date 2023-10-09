@@ -353,6 +353,72 @@ spec:
               environments:
                 additionalProperties:
                   properties:
+                    targets:
+                      items:
+                        description: TargetStatus represents the status of an application
+                          object.
+                        properties:
+                          clusterAppRef:
+                            description: ClusterAppRef gives the app object reference,
+                              and a cluster reference if in a remote cluster
+                            properties:
+                              apiVersion:
+                                description: API version of the referent.
+                                type: string
+                              clusterRef:
+                                description: CrossNamespaceClusterReference contains
+                                  enough information to let you locate the typed Kubernetes
+                                  resource object at cluster level.
+                                properties:
+                                  apiVersion:
+                                    description: API version of the referent.
+                                    type: string
+                                  kind:
+                                    description: Kind of the referent.
+                                    enum:
+                                    - GitopsCluster
+                                    type: string
+                                  name:
+                                    description: Name of the referent.
+                                    type: string
+                                  namespace:
+                                    description: Namespace of the referent, defaults
+                                      to the namespace of the Kubernetes resource
+                                      object that contains the reference.
+                                    type: string
+                                required:
+                                - kind
+                                - name
+                                type: object
+                              kind:
+                                description: Kind of the referent.
+                                type: string
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - apiVersion
+                            - kind
+                            - name
+                            type: object
+                          error:
+                            description: Error is set if the application object is
+                              not present or not ready, and empty otherwise.
+                            type: string
+                          ready:
+                            description: Ready is true if the application object is
+                              present and healthy, and false otherwise.
+                            type: boolean
+                          revision:
+                            description: Revision is set if the application object
+                              is present and has had a configuration applied, and
+                              empty otherwise.
+                            type: string
+                        required:
+                        - clusterAppRef
+                        - ready
+                        type: object
+                      type: array
                     waitingApproval:
                       description: WaitingApproval holds the environment revision
                         that's currently waiting approval.

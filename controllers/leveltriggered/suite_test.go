@@ -1,4 +1,4 @@
-package controllers
+package leveltriggered
 
 import (
 	"context"
@@ -83,8 +83,8 @@ func (t *testEventRecorder) AnnotatedEventf(object runtime.Object, annotations m
 func TestMain(m *testing.M) {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "config", "crd", "bases"),
-			filepath.Join("..", "config", "testdata", "crds"),
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "config", "testdata", "crds"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -122,7 +122,8 @@ func TestMain(m *testing.M) {
 	}
 
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
+		Scheme:             scheme.Scheme,
+		MetricsBindAddress: ":18080",
 	})
 	if err != nil {
 		log.Fatalf("initializing controller manager failed: %s", err)

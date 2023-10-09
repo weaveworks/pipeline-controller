@@ -1,9 +1,10 @@
-package controllers
+package leveltriggered
 
 import (
 	"context"
 	"fmt"
 
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,11 +32,7 @@ type PipelineReconciler struct {
 	recorder       record.EventRecorder
 }
 
-func NewPipelineReconciler(
-	c client.Client,
-	s *runtime.Scheme,
-	controllerName string,
-) *PipelineReconciler {
+func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
 
 	return &PipelineReconciler{
@@ -68,13 +65,29 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	for _, env := range pipeline.Spec.Environments {
-		for _, target := range env.Targets {
-			// check cluster only if ref is defined
-			if target.ClusterRef != nil {
-				cluster, err := r.getCluster(ctx, pipeline, *target.ClusterRef)
-				if err != nil {
+	envStatuses := map[string]*v1alpha1.EnvironmentStatus{}
+	var unready bool
 
+	for _, env := range pipeline.Spec.Environments {
+		var envStatus v1alpha1.EnvironmentStatus
+		envStatus.Targets = make([]v1alpha1.TargetStatus, len(env.Targets))
+		envStatuses[env.Name] = &envStatus
+
+		for i, target := range env.Targets {
+			targetStatus := &envStatus.Targets[i]
+			targetStatus.ClusterAppRef.LocalAppReference = pipeline.Spec.AppRef
+
+			var clusterObject *clusterctrlv1alpha1.GitopsCluster
+			if target.ClusterRef != nil {
+				// record the fact of the remote cluster in the target status
+				targetStatus.ClusterAppRef.ClusterRef = target.ClusterRef
+
+				// even though we could just get the client from our list of clients, we check that the cluster object exists
+				// every time. We might have been queued because of a cluster disappearing.
+
+				var err error
+				clusterObject, err = r.getCluster(ctx, pipeline, *target.ClusterRef)
+				if err != nil {
 					// emit the event whatever problem there was
 					r.emitEventf(
 						&pipeline,
@@ -87,56 +100,71 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 					// not found -- fine, maybe things are happening out of order; make a note and wait until the cluster exists (or something else happens).
 					if apierrors.IsNotFound(err) {
-						if err := r.setStatusCondition(ctx, pipeline, fmt.Sprintf("Target cluster '%s' not found", target.ClusterRef.String()),
-							v1alpha1.TargetClusterNotFoundReason); err != nil {
-							r.emitEventf(
-								&pipeline,
-								corev1.EventTypeWarning,
-								"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s",
-								pipeline.GetNamespace(), pipeline.GetName(),
-								err,
-							)
-							return ctrl.Result{}, err
-						}
-						// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-						return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+						targetStatus.Error = err.Error()
+						unready = true
+						continue
 					}
 
 					// some other error -- this _is_ unexpected, so return it to controller-runtime.
 					return ctrl.Result{}, err
 				}
 
-				if !conditions.IsReady(cluster.Status.Conditions) {
-					err := r.setStatusCondition(
-						ctx, pipeline,
-						fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String()),
-						v1alpha1.TargetClusterNotReadyReason,
-					)
-					if err != nil {
-						r.emitEventf(
-							&pipeline,
-							corev1.EventTypeWarning,
-							"SetStatusConditionError", "Failed to set status for pipeline %s/%s: %s",
-							pipeline.GetNamespace(), pipeline.GetName(),
-							err,
-						)
-						return ctrl.Result{}, err
-					}
-					// do not requeue immediately, when the cluster is created the watcher should trigger a reconciliation
-					return ctrl.Result{RequeueAfter: v1alpha1.DefaultRequeueInterval}, nil
+				if !conditions.IsReady(clusterObject.Status.Conditions) {
+					msg := fmt.Sprintf("Target cluster '%s' not ready", target.ClusterRef.String())
+					targetStatus.Error = msg
+					unready = true
+					continue
 				}
 			}
+
+			// it's OK if this is `nil` -- that represents the local cluster.
+			clusterClient, err := r.getClusterClient(clusterObject)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// look up the actual application
+			var app helmv2.HelmRelease // FIXME this can be other kinds!
+			appKey := targetObjectKey(&pipeline, &target)
+			err = clusterClient.Get(ctx, appKey, &app)
+			if err != nil {
+				r.emitEventf(
+					&pipeline,
+					corev1.EventTypeWarning,
+					"GetAppError", "Failed to get application object %s%s/%s for pipeline %s/%s: %s",
+					clusterPrefix(target.ClusterRef), appKey.Namespace, appKey.Name,
+					pipeline.GetNamespace(), pipeline.GetName(),
+					err,
+				)
+
+				targetStatus.Error = err.Error()
+				unready = true
+				continue
+			}
+			setTargetStatus(targetStatus, &app)
 		}
 	}
 
-	newCondition := metav1.Condition{
-		Type:    conditions.ReadyCondition,
-		Status:  metav1.ConditionTrue,
-		Reason:  v1alpha1.ReconciliationSucceededReason,
-		Message: trimString("All clusters checked", v1alpha1.MaxConditionMessageLength),
+	var readyCondition metav1.Condition
+	if unready {
+		readyCondition = metav1.Condition{
+			Type:    conditions.ReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  v1alpha1.TargetNotReadableReason,
+			Message: "One or more targets was not reachable or not present",
+		}
+	} else {
+		readyCondition = metav1.Condition{
+			Type:    conditions.ReadyCondition,
+			Status:  metav1.ConditionTrue,
+			Reason:  v1alpha1.ReconciliationSucceededReason,
+			Message: trimString("All clusters checked", v1alpha1.MaxConditionMessageLength),
+		}
 	}
+
 	pipeline.Status.ObservedGeneration = pipeline.Generation
-	apimeta.SetStatusCondition(&pipeline.Status.Conditions, newCondition)
+	apimeta.SetStatusCondition(&pipeline.Status.Conditions, readyCondition)
+	pipeline.Status.Environments = envStatuses
 	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
 		r.emitEventf(
 			&pipeline,
@@ -157,19 +185,35 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineReconciler) setStatusCondition(ctx context.Context, p v1alpha1.Pipeline, msg, reason string) error {
-	newCondition := metav1.Condition{
-		Type:    conditions.ReadyCondition,
-		Status:  metav1.ConditionFalse,
-		Reason:  reason,
-		Message: trimString(msg, v1alpha1.MaxConditionMessageLength),
+// getClusterClient retrieves or creates a client for the cluster in question. A `nil` value for the argument indicates the local cluster.
+func (r *PipelineReconciler) getClusterClient(cluster *clusterctrlv1alpha1.GitopsCluster) (client.Client, error) {
+	if cluster == nil {
+		return r.Client, nil
 	}
-	p.Status.ObservedGeneration = p.Generation
-	apimeta.SetStatusCondition(&p.Status.Conditions, newCondition)
-	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&p), p.Status); err != nil {
-		return fmt.Errorf("failed patching Pipeline: %w", err)
+	// TODO future: get the secret via the cluster object, connect to remote cluster
+	return nil, fmt.Errorf("remote clusters not supported yet")
+}
+
+// targetObjectKey returns the object key (namespaced name) for a target. The Pipeline is passed in as well as the Target, since the definition can be spread between these specs.
+func targetObjectKey(pipeline *v1alpha1.Pipeline, target *v1alpha1.Target) client.ObjectKey {
+	key := client.ObjectKey{}
+	key.Name = pipeline.Spec.AppRef.Name
+	key.Namespace = target.Namespace
+	return key
+}
+
+// clusterPrefix returns a string naming the cluster containing an app, to prepend to the usual namespace/name format of the app object itself. So that it can be empty, the separator is include in the return value.
+func clusterPrefix(ref *v1alpha1.CrossNamespaceClusterReference) string {
+	if ref == nil {
+		return ""
 	}
-	return nil
+	return fmt.Sprintf("%s/%s:", ref.Namespace, ref.Name)
+}
+
+// setTargetStatus gets the relevant status from the app object given, and records it in the TargetStatus.
+func setTargetStatus(status *v1alpha1.TargetStatus, target *helmv2.HelmRelease) {
+	status.Revision = target.Status.LastAppliedRevision
+	status.Ready = conditions.IsReady(target.Status.Conditions)
 }
 
 func (r *PipelineReconciler) patchStatus(ctx context.Context, n types.NamespacedName, newStatus v1alpha1.PipelineStatus) error {
@@ -206,6 +250,11 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
+	// Index the Pipelines by the application references they point at.
+	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, applicationKey /* <- from indexing.go */, r.indexApplication); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
 	if r.recorder == nil {
 		r.recorder = mgr.GetEventRecorderFor(r.ControllerName)
 	}
@@ -215,6 +264,10 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &clusterctrlv1alpha1.GitopsCluster{}},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
+		).
+		Watches(
+			&source.Kind{Type: &helmv2.HelmRelease{}},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForApplication),
 		).
 		Complete(r)
 }

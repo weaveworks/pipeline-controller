@@ -23,6 +23,7 @@ import (
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/controllers"
+	"github.com/weaveworks/pipeline-controller/controllers/leveltriggered"
 	"github.com/weaveworks/pipeline-controller/server"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
 	"github.com/weaveworks/pipeline-controller/server/strategy/notification"
@@ -56,7 +57,11 @@ func main() {
 		promotionRetryDelaySeconds        int
 		promotionRetryMaxDelaySeconds     int
 		promotionRetryFailureThreshold    int
+		useLevelTriggeredController       bool
 	)
+
+	// This is a feature flag, guarding the new level-triggered behaviour.
+	flag.BoolVar(&useLevelTriggeredController, "enable-level-triggered", false, "when true, the controller will use level-triggering rather than relying on notifications")
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
@@ -106,12 +111,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controllers.NewPipelineReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		controllerName,
-	).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Pipeline")
+	var startErr error
+	if useLevelTriggeredController {
+		startErr = leveltriggered.NewPipelineReconciler(
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			controllerName,
+		).SetupWithManager(mgr)
+	} else {
+		startErr = controllers.NewPipelineReconciler(
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			controllerName,
+		).SetupWithManager(mgr)
+	}
+
+	if startErr != nil {
+		setupLog.Error(startErr, "unable to create controller", "controller", "Pipeline")
 		os.Exit(1)
 	}
 
