@@ -39,9 +39,8 @@ func (r *PipelineReconciler) indexClusterKind(kind string) func(o client.Object)
 
 // requestsForCluster returns a func that will look up the pipelines
 // using a cluster, as indexed by `indexClusterKind`.
-func (r *PipelineReconciler) requestsForCluster(indexKey string) func(obj client.Object) []reconcile.Request {
-	return func(obj client.Object) []reconcile.Request {
-		ctx := context.Background()
+func (r *PipelineReconciler) requestsForCluster(indexKey string) func(context.Context, client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		var list v1alpha1.PipelineList
 		key := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 		if err := r.List(ctx, &list, client.MatchingFields{

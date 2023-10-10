@@ -41,9 +41,8 @@ func (r *PipelineReconciler) indexClusterKind(kind string) func(o client.Object)
 
 // requestsForCluster returns a func that will look up the pipelines
 // using a cluster, as indexed by `indexClusterKind`.
-func (r *PipelineReconciler) requestsForCluster(indexKey string) func(obj client.Object) []reconcile.Request {
-	return func(obj client.Object) []reconcile.Request {
-		ctx := context.Background()
+func (r *PipelineReconciler) requestsForCluster(indexKey string) func(context.Context, client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		var list v1alpha1.PipelineList
 		key := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 		if err := r.List(ctx, &list, client.MatchingFields{
@@ -101,8 +100,7 @@ func (r *PipelineReconciler) indexApplication(o client.Object) []string {
 
 // requestsForApplication is given an application object, and looks up the pipeline(s) that use it as a target,
 // assuming they are indexed using indexApplication (or something using the same key format and index).
-func (r *PipelineReconciler) requestsForApplication(obj client.Object) []reconcile.Request {
-	ctx := context.Background()
+func (r *PipelineReconciler) requestsForApplication(ctx context.Context, obj client.Object) []reconcile.Request {
 	var list v1alpha1.PipelineList
 	gvk, err := apiutil.GVKForObject(obj, r.Scheme)
 	if err != nil {

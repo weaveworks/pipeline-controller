@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/pkg/conditions"
@@ -408,11 +407,11 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Pipeline{}).
 		Watches(
-			&source.Kind{Type: &clusterctrlv1alpha1.GitopsCluster{}},
+			&clusterctrlv1alpha1.GitopsCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
 		).
 		Watches(
-			&source.Kind{Type: &helmv2.HelmRelease{}},
+			&helmv2.HelmRelease{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForApplication),
 		).
 		Complete(r)
