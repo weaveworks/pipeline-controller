@@ -111,12 +111,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	pullRequestStrategy, err := pullrequest.New(
+		mgr.GetClient(),
+		log.WithValues("strategy", "pullrequest"),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create GitHub promotion strategy")
+		os.Exit(1)
+	}
+
+	var eventRecorder *events.Recorder
+	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
+	}
+	notificationStrat, _ := notification.NewNotification(mgr.GetClient(), eventRecorder)
+
+	var stratReg strategy.StrategyRegistry
+	stratReg.Register(pullRequestStrategy)
+	stratReg.Register(notificationStrat)
+
 	var startErr error
 	if useLevelTriggeredController {
 		startErr = leveltriggered.NewPipelineReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			controllerName,
+			stratReg,
 		).SetupWithManager(mgr)
 	} else {
 		startErr = controllers.NewPipelineReconciler(
@@ -141,26 +162,6 @@ func main() {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
-
-	pullRequestStrategy, err := pullrequest.New(
-		mgr.GetClient(),
-		log.WithValues("strategy", "pullrequest"),
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create GitHub promotion strategy")
-		os.Exit(1)
-	}
-
-	var eventRecorder *events.Recorder
-	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
-		setupLog.Error(err, "unable to create event recorder")
-		os.Exit(1)
-	}
-	notificationStrat, _ := notification.NewNotification(mgr.GetClient(), eventRecorder)
-
-	var stratReg strategy.StrategyRegistry
-	stratReg.Register(pullRequestStrategy)
-	stratReg.Register(notificationStrat)
 
 	promServer, err := server.NewPromotionServer(
 		mgr.GetClient(),

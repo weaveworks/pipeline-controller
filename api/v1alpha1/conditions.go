@@ -10,6 +10,8 @@ const (
 	TargetClusterNotReadyReason string = "TargetClusterNotReady"
 	// ReconciliationSucceededReason signals that a Pipeline has been successfully reconciled.
 	ReconciliationSucceededReason string = "ReconciliationSucceeded"
+	// EnvironmentNotReadyReason signals the environment is not ready.
+	EnvironmentNotReadyReason string = "EnvironmentNotReady"
 )
 
 // Reasons used by the level-triggered controller.

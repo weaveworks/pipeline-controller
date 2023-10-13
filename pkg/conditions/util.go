@@ -2,7 +2,10 @@ package conditions
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-const ReadyCondition = "Ready"
+const (
+	ReadyCondition            = "Ready"
+	PromotionPendingCondition = "PromotionPending"
+)
 
 func IsReady(cs []metav1.Condition) bool {
 	for _, c := range cs {
