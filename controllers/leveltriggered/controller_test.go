@@ -31,6 +31,13 @@ const (
 	defaultInterval = time.Millisecond * 250
 )
 
+func deleteObjectCleanup(ctx context.Context, g Gomega, obj client.Object) func() {
+	return func() {
+		println("[DEBUG] cleanup", obj.GetNamespace(), obj.GetName())
+		g.Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
+	}
+}
+
 func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 
@@ -39,6 +46,7 @@ func TestReconcile(t *testing.T) {
 		name := "pipeline-" + rand.String(5)
 		clusterName := "cluster-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+		t.Cleanup(deleteObjectCleanup(ctx, g, ns))
 
 		pipeline := newPipeline(name, ns.Name, []*clusterctrlv1alpha1.GitopsCluster{{
 			ObjectMeta: metav1.ObjectMeta{
@@ -64,6 +72,7 @@ func TestReconcile(t *testing.T) {
 		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+		t.Cleanup(deleteObjectCleanup(ctx, g, ns))
 
 		_ = createApp(ctx, k8sClient, g, name, ns.Name) // the name of the pipeline is also used as the name in the appRef, in newPipeline(...)
 
@@ -84,6 +93,8 @@ func TestReconcile(t *testing.T) {
 		g := testingutils.NewGomegaWithT(t)
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+		t.Cleanup(deleteObjectCleanup(ctx, g, ns))
+
 		pipeline := newPipeline(name, ns.Name, nil)
 		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
 
@@ -306,6 +317,7 @@ func TestReconcile(t *testing.T) {
 
 		name := "pipeline-" + rand.String(5)
 		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+		t.Cleanup(deleteObjectCleanup(ctx, g, ns))
 
 		pipeline := newPipeline(name, ns.Name, nil)
 		pipeline.Spec.AppRef.APIVersion = "kustomize.toolkit.fluxcd.io/v1"

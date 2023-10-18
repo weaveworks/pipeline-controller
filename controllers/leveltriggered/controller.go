@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/go-logr/logr"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +20,7 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	capicfg "sigs.k8s.io/cluster-api/util/kubeconfig"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -39,6 +42,15 @@ type clusterAndGVK struct {
 	schema.GroupVersionKind
 }
 
+func (key clusterAndGVK) String() string {
+	return key.ObjectKey.String() + ":" + key.GroupVersionKind.String()
+}
+
+type cacheAndCancel struct {
+	cache  cache.Cache
+	cancel context.CancelFunc
+}
+
 // PipelineReconciler reconciles a Pipeline object
 type PipelineReconciler struct {
 	client.Client
@@ -48,8 +60,10 @@ type PipelineReconciler struct {
 	recorder       record.EventRecorder
 	stratReg       strategy.StrategyRegistry
 
-	caches    map[clusterAndGVK]cache.Cache
+	caches    map[clusterAndGVK]cacheAndCancel
 	cachesMu  *sync.Mutex
+	cachesGC  *gc
+	runner    *runner
 	manager   ctrl.Manager
 	appEvents chan event.GenericEvent
 }
@@ -57,17 +71,27 @@ type PipelineReconciler struct {
 func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, eventRecorder record.EventRecorder, stratReg strategy.StrategyRegistry) *PipelineReconciler {
 	targetScheme := runtime.NewScheme()
 
-	return &PipelineReconciler{
+	pc := &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
 		targetScheme:   targetScheme,
 		recorder:       eventRecorder,
 		ControllerName: controllerName,
 		stratReg:       stratReg,
-		caches:         make(map[clusterAndGVK]cache.Cache),
+		caches:         make(map[clusterAndGVK]cacheAndCancel),
 		cachesMu:       &sync.Mutex{},
 		appEvents:      make(chan event.GenericEvent),
 	}
+	return pc
+}
+
+func (r *PipelineReconciler) getCacheKeys() (res []clusterAndGVK) {
+	r.cachesMu.Lock()
+	defer r.cachesMu.Unlock()
+	for k := range r.caches {
+		res = append(res, k)
+	}
+	return res
 }
 
 //+kubebuilder:rbac:groups=pipelines.weave.works,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
@@ -388,17 +412,17 @@ func (r *PipelineReconciler) watchTargetAndGetReader(ctx context.Context, cluste
 		GroupVersionKind: targetGVK,
 	}
 
-	logger := log.FromContext(ctx).WithValues("component", "target cache", "cluster", clusterKey, "name", client.ObjectKeyFromObject(target), "type", targetGVK)
+	logger := r.manager.GetLogger().WithValues("component", "target-cache", "cluster", clusterKey, "type", targetGVK)
 
 	r.cachesMu.Lock()
-	typeCache, cacheFound := r.caches[cacheKey]
+	cacheEntry, cacheFound := r.caches[cacheKey]
 	r.cachesMu.Unlock()
 	// To construct a cache, we need a *rest.Config. There's two ways to get one:
 	//  - for the local cluster, we can just get the already prepared one from the Manager;
 	//  - for a remote cluster, we can construct one given a kubeconfig; and the kubeconfig will be stored in a Secret,
 	//    associated with the object representing the cluster.
 	if !cacheFound {
-		logger.Info("creating cache for cluster and type", "cluster", clusterKey, "type", targetGVK)
+		logger.Info("creating cache for cluster and type")
 		var cfg *rest.Config
 
 		if clusterObject == nil {
@@ -440,7 +464,7 @@ func (r *PipelineReconciler) watchTargetAndGetReader(ctx context.Context, cluste
 
 		// having done all that, did we really need it?
 		r.cachesMu.Lock()
-		if typeCache, cacheFound = r.caches[cacheKey]; !cacheFound {
+		if cacheEntry, cacheFound = r.caches[cacheKey]; !cacheFound {
 			c, err := cache.New(cfg, cache.Options{
 				Scheme: r.targetScheme,
 			})
@@ -449,31 +473,36 @@ func (r *PipelineReconciler) watchTargetAndGetReader(ctx context.Context, cluste
 				return nil, false, err
 			}
 
-			// this must be done with the lock held, because if it fails, we can't use the cache and shouldn't add it to the map.
-			if err := r.manager.Add(c); err != nil { // this will start it asynchronously
-				r.cachesMu.Unlock()
-				return nil, false, err
+			cancel := r.runner.run(func(ctx context.Context) {
+				if err := c.Start(ctx); err != nil {
+					logger.Error(err, "cache exited with error")
+				}
+			})
+			cacheEntry = cacheAndCancel{
+				cache:  c,
+				cancel: cancel,
 			}
-
-			typeCache = c
-			r.caches[cacheKey] = typeCache
+			r.caches[cacheKey] = cacheEntry
 		}
 		r.cachesMu.Unlock()
+		// Add it to the queue for GC consideration
+		r.cachesGC.register(cacheKey)
 	}
 
 	// Now we have a cache; make sure the object type in question is being watched, so we can query it and get updates.
 
 	// The informer is retrieved whether we created the cache or not, because we want to know if it's synced and thus ready to be queried.
+	typeCache := cacheEntry.cache
 	inf, err := typeCache.GetInformer(ctx, target) // NB not InformerForKind(...), because that uses the typed value cache specifically (see the method comment).
 	if err != nil {
 		return nil, false, err
 	}
 
-	if !cacheFound { // meaning: we created the cache, this time around
+	if !cacheFound { // meaning: we created the cache, this time around, so we'll need to install the event handler.
 		enqueuePipelinesForTarget := func(obj interface{}) {
 			eventObj, ok := obj.(client.Object)
 			if !ok {
-				logger.Info("value to look up in index was not a client.Object", "object", eventObj)
+				logger.Info("value to look up in index was not a client.Object", "object", obj)
 				return
 			}
 			pipelines, err := r.pipelinesForApplication(clusterKey, eventObj)
@@ -591,9 +620,133 @@ func (r *PipelineReconciler) getCluster(ctx context.Context, p v1alpha1.Pipeline
 	return cluster, nil
 }
 
+// == Garbage collection of caches ==
+
+// cacheIndex names the index for keeping track of which pipelines use which caches.
+const cacheIndex = "cache"
+
+// This gives a string representation of a key into the caches map, so it can be used for indexing.
+// It has the signature of `targetIndexerFunc` so it can be used with `indexTargets(...)`.
+// isCacheUsed below relies on this implementation using clusterAndGVK.String(), so that
+// the index keys it uses match what's actually indexed.
+func clusterCacheKey(clusterKey client.ObjectKey, gvk schema.GroupVersionKind, _targetKey client.ObjectKey) string {
+	return (clusterAndGVK{
+		ObjectKey:        clusterKey,
+		GroupVersionKind: gvk,
+	}).String()
+}
+
+// indexTargetCache is an IndexerFunc that returns a key representing the cache a target will come from. This is coupled to
+// the scheme for keeping track of caches, as embodied in the `caches` map in the reconciler the method `watchTargetAndGetReader`;
+// changing how those work, for instance caching by {cluster, namespace, type} instead,  will likely need a change here.
+var indexTargetCache = indexTargets(clusterCacheKey)
+
+// isCacheUsed looks up the given cache key, and returns true if a pipeline uses that cache, and false otherwise; or,
+// an error if the query didn't succeed.
+func (r *PipelineReconciler) isCacheUsed(key clusterAndGVK) (bool, error) {
+	var list v1alpha1.PipelineList
+	if err := r.List(context.TODO(), &list, client.MatchingFields{
+		cacheIndex: key.String(),
+	}); err != nil {
+		return false, err
+	}
+	return len(list.Items) > 0, nil
+}
+
+func (r *PipelineReconciler) removeCache(key clusterAndGVK) {
+	r.cachesMu.Lock()
+	defer r.cachesMu.Unlock()
+	if entry, ok := r.caches[key]; ok {
+		entry.cancel()
+		delete(r.caches, key)
+	}
+}
+
+type cachesInterface interface {
+	isCacheUsed(clusterAndGVK) (bool, error)
+	removeCache(clusterAndGVK)
+}
+
+type gc struct {
+	caches cachesInterface
+	queue  workqueue.RateLimitingInterface
+	log    logr.Logger
+}
+
+func newGC(caches cachesInterface, logger logr.Logger) *gc {
+	ratelimiter := workqueue.NewItemExponentialFailureRateLimiter(2*time.Second, 512*time.Second)
+	queue := workqueue.NewRateLimitingQueueWithConfig(ratelimiter, workqueue.RateLimitingQueueConfig{
+		Name: "cache-garbage-collection",
+	})
+
+	return &gc{
+		caches: caches,
+		queue:  queue,
+		log:    logger,
+	}
+}
+
+func (gc *gc) register(key clusterAndGVK) {
+	gc.log.Info("cache key registered for GC", "key", key)
+	gc.queue.Add(key) // NB not rate limited. Though, this is called when the key is introduced, so it shouldn't matter one way or the other.
+}
+
+func (gc *gc) loop() {
+	for {
+		item, shutdown := gc.queue.Get()
+		if shutdown {
+			return
+		}
+		key, ok := item.(clusterAndGVK)
+		if !ok {
+			gc.queue.Forget(item)
+			gc.queue.Done(item)
+		}
+
+		if ok, err := gc.caches.isCacheUsed(key); err != nil {
+			gc.log.Error(err, "calling isCacheUsed", "key", key)
+		} else if ok {
+			// still used, requeue for consideration
+			gc.queue.Done(key)
+			gc.queue.AddRateLimited(key)
+		} else {
+			gc.log.Info("removing unused cache", "key", key, "requeues", gc.queue.NumRequeues(key))
+			gc.queue.Forget(key)
+			gc.queue.Done(key)
+			gc.caches.removeCache(key)
+		}
+	}
+}
+
+func (gc *gc) Start(ctx context.Context) error {
+	if gc.caches == nil || gc.queue == nil {
+		return fmt.Errorf("neither of caches nor queue can be nil")
+	}
+	// queue.Get blocks until either there's an item, or the queue is shutting down, so we can't put
+	// it in a select with <-ctx.Done(). Instead, do this bit in a goroutine, and rely on it exiting
+	// when the queue is shut down.
+	go gc.loop()
+	<-ctx.Done()
+	gc.log.Info("shutting down")
+	gc.queue.ShutDown()
+	return nil
+}
+
+// == Setup of indices and static watchers ==
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.manager = mgr
+
+	r.runner = newRunner()
+	if err := mgr.Add(r.runner); err != nil {
+		return err
+	}
+
+	r.cachesGC = newGC(r, mgr.GetLogger().WithValues("component", "target-cache-gc"))
+	if err := mgr.Add(r.cachesGC); err != nil {
+		return err
+	}
 
 	const (
 		gitopsClusterIndexKey string = ".spec.environment.ClusterRef" // this is arbitrary, but let's make it suggest what it's indexing.
@@ -606,6 +759,11 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Index the Pipelines by the application references they point at.
 	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, applicationKey, indexApplication /* <- both from indexing.go */); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
+	// Index the Pipelines by the cache they require for their targets.
+	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, cacheIndex, indexTargetCache); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 

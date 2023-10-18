@@ -67,7 +67,7 @@ func (r *PipelineReconciler) requestsForCluster(indexKey string) func(context.Co
 const applicationKey = ".spec.environments[].targets[].appRef"
 
 // targetKeyFunc is a type representing a way to get an index key from a target spec.
-type targetKeyFunc func(clusterName, clusterNamespace string, targetKind schema.GroupVersionKind, targetName, targetNamespace string) string
+type targetKeyFunc func(cluster client.ObjectKey, typ schema.GroupVersionKind, target client.ObjectKey) string
 
 // indexTargets is given a func which returns a key for a target spec, and returns a `client.IndexerFunc` that will index
 // each target from a Pipeline object.
@@ -92,20 +92,22 @@ func indexTargets(fn targetKeyFunc) func(client.Object) []string {
 		var res []string
 		for _, env := range p.Spec.Environments {
 			for _, target := range env.Targets {
-				var clusterName, clusterNamespace string
+				var clusterKey client.ObjectKey
 				if target.ClusterRef != nil {
-					clusterName = target.ClusterRef.Name
-					clusterNamespace = target.ClusterRef.Namespace
-					if clusterNamespace == "" {
-						clusterNamespace = p.GetNamespace()
+					clusterKey.Name = target.ClusterRef.Name
+					clusterKey.Namespace = target.ClusterRef.Namespace
+					if clusterKey.Namespace == "" {
+						clusterKey.Namespace = p.GetNamespace()
 					}
 				}
 
-				namespace := target.Namespace
-				if namespace == "" {
-					namespace = p.GetNamespace()
+				var targetKey client.ObjectKey
+				targetKey.Namespace = target.Namespace
+				targetKey.Name = name
+				if targetKey.Namespace == "" {
+					targetKey.Namespace = p.GetNamespace()
 				}
-				key := fn(clusterNamespace, clusterName, gvk, namespace, name)
+				key := fn(clusterKey, gvk, targetKey)
 				res = append(res, key)
 			}
 		}
@@ -113,13 +115,15 @@ func indexTargets(fn targetKeyFunc) func(client.Object) []string {
 	}
 }
 
+func targetIndexKey(clusterKey client.ObjectKey, gvk schema.GroupVersionKind, targetKey client.ObjectKey) string {
+	key := fmt.Sprintf("%s:%s:%s", clusterKey, gvk, targetKey)
+	return key
+}
+
 // indexApplication extracts all the application refs from a pipeline. The index keys are
 //
 //	<cluster namespace>/<cluster name>:<group>/<kind>/<namespace>/<name>`.
-var indexApplication = indexTargets(func(clusterNamespace, clusterName string, gvk schema.GroupVersionKind, targetNamespace, targetName string) string {
-	key := fmt.Sprintf("%s/%s:%s/%s/%s/%s", clusterNamespace, clusterName, gvk.Group, gvk.Kind, targetNamespace, targetName)
-	return key
-})
+var indexApplication = indexTargets(targetIndexKey)
 
 // pipelinesForApplication is given an application object and its cluster, and looks up the pipeline(s) that use it as a target.
 // It assumes applications are indexed using `indexApplication(...)` (or something using the same key format and index).
@@ -133,7 +137,7 @@ func (r *PipelineReconciler) pipelinesForApplication(clusterName client.ObjectKe
 		return nil, err
 	}
 
-	key := fmt.Sprintf("%s/%s:%s/%s/%s/%s", clusterName.Namespace, clusterName.Name, gvk.Group, gvk.Kind, obj.GetNamespace(), obj.GetName())
+	key := targetIndexKey(clusterName, gvk, client.ObjectKeyFromObject(obj))
 	if err := r.List(ctx, &list, client.MatchingFields{
 		applicationKey: key,
 	}); err != nil {
