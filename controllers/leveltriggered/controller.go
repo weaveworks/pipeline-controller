@@ -605,7 +605,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Index the Pipelines by the application references they point at.
-	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, applicationKey /* <- from indexing.go */, r.indexApplication); err != nil {
+	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, applicationKey, indexApplication /* <- both from indexing.go */); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 

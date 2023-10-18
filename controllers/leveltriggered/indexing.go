@@ -66,49 +66,60 @@ func (r *PipelineReconciler) requestsForCluster(indexKey string) func(context.Co
 
 const applicationKey = ".spec.environments[].targets[].appRef"
 
+// targetKeyFunc is a type representing a way to get an index key from a target spec.
+type targetKeyFunc func(clusterName, clusterNamespace string, targetKind schema.GroupVersionKind, targetName, targetNamespace string) string
+
+// indexTargets is given a func which returns a key for a target spec, and returns a `client.IndexerFunc` that will index
+// each target from a Pipeline object.
+func indexTargets(fn targetKeyFunc) func(client.Object) []string {
+	return func(o client.Object) []string {
+		p, ok := o.(*v1alpha1.Pipeline)
+		if !ok {
+			panic(fmt.Sprintf("Expected a Pipeline, got %T", o))
+		}
+
+		// TODO future: account for the name being provided in the target ref.
+		name := p.Spec.AppRef.Name
+		kind := p.Spec.AppRef.Kind
+		apiVersion := p.Spec.AppRef.APIVersion
+		gv, err := schema.ParseGroupVersion(apiVersion)
+		if err != nil {
+			// FIXME: ideally we'd log this problem here; but, the log is not available.
+			return nil
+		}
+		gvk := gv.WithKind(kind)
+
+		var res []string
+		for _, env := range p.Spec.Environments {
+			for _, target := range env.Targets {
+				var clusterName, clusterNamespace string
+				if target.ClusterRef != nil {
+					clusterName = target.ClusterRef.Name
+					clusterNamespace = target.ClusterRef.Namespace
+					if clusterNamespace == "" {
+						clusterNamespace = p.GetNamespace()
+					}
+				}
+
+				namespace := target.Namespace
+				if namespace == "" {
+					namespace = p.GetNamespace()
+				}
+				key := fn(clusterNamespace, clusterName, gvk, namespace, name)
+				res = append(res, key)
+			}
+		}
+		return res
+	}
+}
+
 // indexApplication extracts all the application refs from a pipeline. The index keys are
 //
 //	<cluster namespace>/<cluster name>:<group>/<kind>/<namespace>/<name>`.
-//
-// If a target refers to a cluster without giving a namespace, it's defaulted to the pipeline object's namespace.
-func (r *PipelineReconciler) indexApplication(o client.Object) []string {
-	p, ok := o.(*v1alpha1.Pipeline)
-	if !ok {
-		panic(fmt.Sprintf("Expected a Pipeline, got %T", o))
-	}
-
-	// TODO future: account for the name being provided in the target ref.
-	name := p.Spec.AppRef.Name
-	kind := p.Spec.AppRef.Kind
-	apiVersion := p.Spec.AppRef.APIVersion
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		// FIXME: ideally we'd log this problem here; but, the log is not available.
-		return nil
-	}
-
-	var res []string
-	for _, env := range p.Spec.Environments {
-		for _, target := range env.Targets {
-			var clusterName, clusterNamespace string
-			if target.ClusterRef != nil {
-				clusterName = target.ClusterRef.Name
-				clusterNamespace = target.ClusterRef.Namespace
-				if clusterNamespace == "" {
-					clusterNamespace = p.GetNamespace()
-				}
-			}
-
-			namespace := target.Namespace
-			if namespace == "" {
-				namespace = p.GetNamespace()
-			}
-			key := fmt.Sprintf("%s/%s:%s/%s/%s/%s", clusterNamespace, clusterName, gv.Group, kind, namespace, name)
-			res = append(res, key)
-		}
-	}
-	return res
-}
+var indexApplication = indexTargets(func(clusterNamespace, clusterName string, gvk schema.GroupVersionKind, targetNamespace, targetName string) string {
+	key := fmt.Sprintf("%s/%s:%s/%s/%s/%s", clusterNamespace, clusterName, gvk.Group, gvk.Kind, targetNamespace, targetName)
+	return key
+})
 
 // pipelinesForApplication is given an application object and its cluster, and looks up the pipeline(s) that use it as a target.
 // It assumes applications are indexed using `indexApplication(...)` (or something using the same key format and index).
