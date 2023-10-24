@@ -29,9 +29,15 @@ func TestCacheGC(t *testing.T) {
 		},
 	}
 
+	// This is a minor cheat, since it looks into a private field of the controller. But, it should be
+	// relatively easy to replace if that detail changed.
+	getCacheKeys := func() []clusterAndGVK {
+		return pipelineReconciler.caches.getCacheKeys()
+	}
+
 	// First, let's check the initial state. Other tests may leave detritus, so this just checks we
 	// don't have the fake application that's for this specific test.
-	g.Expect(pipelineReconciler.getCacheKeys()).ToNot(ContainElements(expectedCacheKey))
+	g.Expect(getCacheKeys()).ToNot(ContainElements(expectedCacheKey))
 
 	ctx := context.TODO()
 	ns := testingutils.NewNamespace(ctx, g, k8sClient)
@@ -69,12 +75,12 @@ func TestCacheGC(t *testing.T) {
 	g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
 
 	// Now there's a pipeline that mentions the fake kind -- did it create a cache for it?
-	g.Eventually(pipelineReconciler.getCacheKeys).Should(ContainElement(expectedCacheKey))
+	g.Eventually(getCacheKeys).Should(ContainElement(expectedCacheKey))
 
 	g.Expect(k8sClient.Delete(ctx, pipeline)).To(Succeed())
 
 	// Now there's no pipeline using the fake kind, so it should get cleaned up.
-	g.Eventually(pipelineReconciler.getCacheKeys, "5s", "0.5s").ShouldNot(ContainElement(expectedCacheKey))
+	g.Eventually(getCacheKeys, "5s", "0.5s").ShouldNot(ContainElement(expectedCacheKey))
 
 	// Second scenario: the target exists. This is more or less the happy path: you have a pipeline, it's working, you delete it.
 
@@ -94,19 +100,19 @@ func TestCacheGC(t *testing.T) {
 	g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
 
 	// Now there's a pipeline that mentions the fake kind -- did it create a cache for it?
-	g.Eventually(pipelineReconciler.getCacheKeys).Should(ContainElement(expectedCacheKey))
+	g.Eventually(getCacheKeys).Should(ContainElement(expectedCacheKey))
 
 	// Delete the pipeline, leave the target there
 	g.Expect(k8sClient.Delete(ctx, pipeline)).To(Succeed())
 
 	// Now there's no pipeline using the fake kind, so it should get cleaned up even though the target is still there.
-	g.Eventually(pipelineReconciler.getCacheKeys, "5s", "0.5s").ShouldNot(ContainElement(expectedCacheKey))
+	g.Eventually(getCacheKeys, "5s", "0.5s").ShouldNot(ContainElement(expectedCacheKey))
 
 	g.Expect(k8sClient.Delete(ctx, target)).To(Succeed())
 
 	// Third scenario: two pipelines refer to the same {cluser, type}. Checks that the cache won't get deleted if
 	// there's still something referring to it.
-	g.Expect(pipelineReconciler.getCacheKeys()).ToNot(ContainElement(expectedCacheKey))
+	g.Expect(getCacheKeys()).ToNot(ContainElement(expectedCacheKey))
 
 	target = newFake(rand.String(5))
 	p1 := newPipeline(rand.String(5), target.GetName())
@@ -115,7 +121,7 @@ func TestCacheGC(t *testing.T) {
 	g.Expect(k8sClient.Create(ctx, p2)).To(Succeed())
 
 	// Confirm there's a cache for the target type
-	g.Eventually(pipelineReconciler.getCacheKeys).Should(ContainElement(expectedCacheKey))
+	g.Eventually(getCacheKeys).Should(ContainElement(expectedCacheKey))
 
 	// Delete one pipeline, there should still be a cache.
 	g.Expect(k8sClient.Delete(ctx, p1)).To(Succeed())
@@ -126,6 +132,6 @@ func TestCacheGC(t *testing.T) {
 		err := pipelineReconciler.Get(ctx, client.ObjectKeyFromObject(p1), &p)
 		return err != nil && client.IgnoreNotFound(err) == nil
 	}).Should(BeTrue())
-	// This is a minor cheat, using an internal API, because I can't wait around for something to _not_ happen.
-	g.Expect(pipelineReconciler.isCacheUsed(expectedCacheKey)).To(BeTrue())
+	// This is a minor cheat on top of a cheat, using an internal API, because I can't wait around for something to _not_ happen.
+	g.Expect(pipelineReconciler.caches.isCacheUsed(expectedCacheKey)).To(BeTrue())
 }

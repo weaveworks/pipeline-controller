@@ -7,7 +7,6 @@ import (
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -113,36 +112,4 @@ func indexTargets(fn targetKeyFunc) func(client.Object) []string {
 		}
 		return res
 	}
-}
-
-func targetIndexKey(clusterKey client.ObjectKey, gvk schema.GroupVersionKind, targetKey client.ObjectKey) string {
-	key := fmt.Sprintf("%s:%s:%s", clusterKey, gvk, targetKey)
-	return key
-}
-
-// indexApplication extracts all the application refs from a pipeline. The index keys are
-//
-//	<cluster namespace>/<cluster name>:<group>/<kind>/<namespace>/<name>`.
-var indexApplication = indexTargets(targetIndexKey)
-
-// pipelinesForApplication is given an application object and its cluster, and looks up the pipeline(s) that use it as a target.
-// It assumes applications are indexed using `indexApplication(...)` (or something using the same key format and index).
-// `clusterName` can be a zero value, but if it's not, both the namespace and name should be supplied (since the namespace will
-// be give a value if there's only a name supplied, when indexing. See `indexApplication()`).
-func (r *PipelineReconciler) pipelinesForApplication(clusterName client.ObjectKey, obj client.Object) ([]v1alpha1.Pipeline, error) {
-	ctx := context.Background()
-	var list v1alpha1.PipelineList
-	gvk, err := apiutil.GVKForObject(obj, r.Scheme)
-	if err != nil {
-		return nil, err
-	}
-
-	key := targetIndexKey(clusterName, gvk, client.ObjectKeyFromObject(obj))
-	if err := r.List(ctx, &list, client.MatchingFields{
-		applicationKey: key,
-	}); err != nil {
-		return nil, err
-	}
-
-	return list.Items, nil
 }
