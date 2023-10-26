@@ -7,6 +7,8 @@ import (
 	pipelinev1alpha1 "github.com/weaveworks/pipeline-controller/api/v1alpha1"
 )
 
+//go:generate mockgen -destination mock_strategy_test.go -package strategy github.com/weaveworks/pipeline-controller/server/strategy Strategy
+
 // Strategy is the interface that all types need to implement that intend to handle at least one of the strategies requested in a Pipeline's
 // `.spec.promotion` field.
 type Strategy interface {

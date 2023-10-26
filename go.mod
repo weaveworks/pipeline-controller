@@ -23,7 +23,6 @@ require (
 	github.com/go-git/go-git/v5 v5.6.1
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.2
-	github.com/golang/mock v1.6.0
 	github.com/google/go-github/v32 v32.1.0
 	github.com/google/go-github/v49 v49.1.0
 	github.com/hashicorp/go-uuid v1.0.3
@@ -35,6 +34,7 @@ require (
 	github.com/weaveworks/cluster-controller v1.3.0
 	github.com/weaveworks/pipeline-controller/api v0.0.0
 	github.com/xanzy/go-gitlab v0.78.0
+	go.uber.org/mock v0.3.0
 	golang.org/x/oauth2 v0.6.0
 	k8s.io/api v0.25.2
 	k8s.io/apimachinery v0.27.0-beta.0

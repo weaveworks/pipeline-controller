@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
+	"github.com/weaveworks/pipeline-controller/server/strategy"
 )
 
 var k8sManager ctrl.Manager
@@ -26,6 +27,7 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var kubeConfig []byte
 var eventRecorder *testEventRecorder
+var pipelineReconciler *PipelineReconciler
 
 type testEvent struct {
 	object    runtime.Object
@@ -131,12 +133,14 @@ func TestMain(m *testing.M) {
 
 	eventRecorder = &testEventRecorder{events: map[string][]testEvent{}}
 
-	err = (&PipelineReconciler{
+	pipelineReconciler = &PipelineReconciler{
 		Client:       k8sManager.GetClient(),
 		Scheme:       scheme.Scheme,
 		targetScheme: scheme.Scheme,
 		recorder:     eventRecorder,
-	}).SetupWithManager(k8sManager)
+		stratReg:     strategy.StrategyRegistry{},
+	}
+	err = pipelineReconciler.SetupWithManager(k8sManager)
 	if err != nil {
 		log.Fatalf("setup pipeline controller failed: %s", err)
 	}
