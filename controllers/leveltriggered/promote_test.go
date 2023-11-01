@@ -37,7 +37,7 @@ func TestPromotionAlgorithm(t *testing.T) {
 	prodApp := createApp(ctx, k8sClient, g, appName, prodNs.Name)
 	setAppRevisionAndReadyStatus(ctx, g, prodApp, "v1.0.0")
 
-	mockStrategy := setStrategyRegistry(t, pipelineReconciler)
+	mockStrategy := installMockStrategy(t, pipelineReconciler)
 	mockStrategy.EXPECT().Handles(gomock.Any()).Return(true).AnyTimes()
 
 	mockStrategy.EXPECT().
@@ -226,7 +226,8 @@ func setAppStatusReadyCondition(ctx context.Context, g Gomega, hr *helmv2.HelmRe
 	g.Expect(k8sClient.Status().Update(ctx, hr)).To(Succeed())
 }
 
-func setStrategyRegistry(t *testing.T, r *PipelineReconciler) *strategy.MockStrategy {
+func installMockStrategy(t *testing.T, r *PipelineReconciler) *strategy.MockStrategy {
+	r.stratReg = strategy.StrategyRegistry{}
 	mockCtrl := gomock.NewController(t)
 	mockStrategy := strategy.NewMockStrategy(mockCtrl)
 
