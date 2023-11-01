@@ -7,7 +7,6 @@ import (
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -41,9 +40,8 @@ func (r *PipelineReconciler) indexClusterKind(kind string) func(o client.Object)
 
 // requestsForCluster returns a func that will look up the pipelines
 // using a cluster, as indexed by `indexClusterKind`.
-func (r *PipelineReconciler) requestsForCluster(indexKey string) func(obj client.Object) []reconcile.Request {
-	return func(obj client.Object) []reconcile.Request {
-		ctx := context.Background()
+func (r *PipelineReconciler) requestsForCluster(indexKey string) func(context.Context, client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		var list v1alpha1.PipelineList
 		key := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 		if err := r.List(ctx, &list, client.MatchingFields{
@@ -67,64 +65,51 @@ func (r *PipelineReconciler) requestsForCluster(indexKey string) func(obj client
 
 const applicationKey = ".spec.environments[].targets[].appRef"
 
-// indexApplication extracts all the application refs from a pipeline. The index keys are
-// `<group>/<kind>/<namespace>/<name>`.
-func (r *PipelineReconciler) indexApplication(o client.Object) []string {
-	p, ok := o.(*v1alpha1.Pipeline)
-	if !ok {
-		panic(fmt.Sprintf("Expected a Pipeline, got %T", o))
-	}
+// targetKeyFunc is a type representing a way to get an index key from a target spec.
+type targetKeyFunc func(cluster client.ObjectKey, typ schema.GroupVersionKind, target client.ObjectKey) string
 
-	// TODO future: account for the name being provided in the target ref.
-	name := p.Spec.AppRef.Name
-	kind := p.Spec.AppRef.Kind
-	apiVersion := p.Spec.AppRef.APIVersion
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		// FIXME: ideally we'd log this problem here; but, the log is not available.
-		return nil
-	}
-
-	var res []string
-	for _, env := range p.Spec.Environments {
-		for _, target := range env.Targets {
-			namespace := target.Namespace
-			if namespace == "" {
-				namespace = p.GetNamespace()
-			}
-			key := fmt.Sprintf("%s/%s/%s/%s", gv.Group, kind, namespace, name)
-			res = append(res, key)
+// indexTargets is given a func which returns a key for a target spec, and returns a `client.IndexerFunc` that will index
+// each target from a Pipeline object.
+func indexTargets(fn targetKeyFunc) func(client.Object) []string {
+	return func(o client.Object) []string {
+		p, ok := o.(*v1alpha1.Pipeline)
+		if !ok {
+			panic(fmt.Sprintf("Expected a Pipeline, got %T", o))
 		}
-	}
-	return res
-}
 
-// requestsForApplication is given an application object, and looks up the pipeline(s) that use it as a target,
-// assuming they are indexed using indexApplication (or something using the same key format and index).
-func (r *PipelineReconciler) requestsForApplication(obj client.Object) []reconcile.Request {
-	ctx := context.Background()
-	var list v1alpha1.PipelineList
-	gvk, err := apiutil.GVKForObject(obj, r.Scheme)
-	if err != nil {
-		// FIXME: it'd be good to log here, would require saving a logger in the reconciler, or having it in the closure.
-		return nil
-	}
+		// TODO future: account for the name being provided in the target ref.
+		name := p.Spec.AppRef.Name
+		kind := p.Spec.AppRef.Kind
+		apiVersion := p.Spec.AppRef.APIVersion
+		gv, err := schema.ParseGroupVersion(apiVersion)
+		if err != nil {
+			// FIXME: ideally we'd log this problem here; but, the log is not available.
+			return nil
+		}
+		gvk := gv.WithKind(kind)
 
-	key := fmt.Sprintf("%s/%s/%s/%s", gvk.Group, gvk.Kind, obj.GetNamespace(), obj.GetName())
-	if err := r.List(ctx, &list, client.MatchingFields{
-		applicationKey: key,
-	}); err != nil {
-		return nil
-	}
+		var res []string
+		for _, env := range p.Spec.Environments {
+			for _, target := range env.Targets {
+				var clusterKey client.ObjectKey
+				if target.ClusterRef != nil {
+					clusterKey.Name = target.ClusterRef.Name
+					clusterKey.Namespace = target.ClusterRef.Namespace
+					if clusterKey.Namespace == "" {
+						clusterKey.Namespace = p.GetNamespace()
+					}
+				}
 
-	if len(list.Items) == 0 {
-		return nil
+				var targetKey client.ObjectKey
+				targetKey.Namespace = target.Namespace
+				targetKey.Name = name
+				if targetKey.Namespace == "" {
+					targetKey.Namespace = p.GetNamespace()
+				}
+				key := fn(clusterKey, gvk, targetKey)
+				res = append(res, key)
+			}
+		}
+		return res
 	}
-
-	reqs := make([]reconcile.Request, len(list.Items))
-	for i := range list.Items {
-		reqs[i].Name = list.Items[i].Name
-		reqs[i].Namespace = list.Items[i].Namespace
-	}
-	return reqs
 }

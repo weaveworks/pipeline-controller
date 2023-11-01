@@ -93,5 +93,5 @@ func TestPromote(t *testing.T) {
 	_, err = strat.Promote(context.Background(), promSpec, promotion)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	g.Eventually(eventRecorder.Events).Should(Receive(Equal("Normal Promote Promote pipeline test-ns/test-pipeline to test with version v0.1.2")))
+	g.Eventually(eventRecorder.Events).Should(Receive(HavePrefix("Normal Promote Promote pipeline test-ns/test-pipeline to test with version v0.1.2")))
 }

@@ -4,17 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -28,22 +30,31 @@ import (
 type PipelineReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
-	targetScheme   *runtime.Scheme
 	ControllerName string
+	caches         *caches
 	recorder       record.EventRecorder
 	stratReg       strategy.StrategyRegistry
+
+	appEvents chan event.GenericEvent
 }
 
-func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, stratReg strategy.StrategyRegistry) *PipelineReconciler {
+func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, eventRecorder record.EventRecorder, stratReg strategy.StrategyRegistry) *PipelineReconciler {
+	appEvents := make(chan event.GenericEvent)
+
+	// this is empty because we're going to use unstructured.Unstructured objects to support arbitrary types.
+	// If something changed and we wanted typed objects, this scheme would need to have those registered.
 	targetScheme := runtime.NewScheme()
 
-	return &PipelineReconciler{
+	pc := &PipelineReconciler{
 		Client:         c,
 		Scheme:         s,
-		targetScheme:   targetScheme,
+		recorder:       eventRecorder,
 		ControllerName: controllerName,
 		stratReg:       stratReg,
+		caches:         newCaches(appEvents, targetScheme),
+		appEvents:      appEvents,
 	}
+	return pc
 }
 
 //+kubebuilder:rbac:groups=pipelines.weave.works,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
@@ -120,22 +131,33 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				}
 			}
 
-			// it's OK if this is `nil` -- that represents the local cluster.
-			clusterClient, err := r.getClusterClient(clusterObject)
+			targetObj, err := targetObject(&pipeline, &target)
+			if err != nil {
+				targetStatus.Error = fmt.Sprintf("target spec could not be interpreted as an object: %s", err.Error())
+				unready = true
+				continue
+			}
+
+			// it's OK if clusterObject is still `nil` -- that represents the local cluster.
+			clusterClient, ok, err := r.caches.watchTargetAndGetReader(ctx, clusterObject, targetObj)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+			if !ok {
+				targetStatus.Error = "Target cluster client is not synced"
+				unready = true
+				continue
+			}
 
+			targetKey := client.ObjectKeyFromObject(targetObj)
 			// look up the actual application
-			var app helmv2.HelmRelease // FIXME this can be other kinds!
-			appKey := targetObjectKey(&pipeline, &target)
-			err = clusterClient.Get(ctx, appKey, &app)
+			err = clusterClient.Get(ctx, targetKey, targetObj)
 			if err != nil {
 				r.emitEventf(
 					&pipeline,
 					corev1.EventTypeWarning,
 					"GetAppError", "Failed to get application object %s%s/%s for pipeline %s/%s: %s",
-					clusterPrefix(target.ClusterRef), appKey.Namespace, appKey.Name,
+					clusterPrefix(target.ClusterRef), targetKey.Namespace, targetKey.Name,
 					pipeline.GetNamespace(), pipeline.GetName(),
 					err,
 				)
@@ -144,7 +166,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				unready = true
 				continue
 			}
-			setTargetStatus(targetStatus, &app)
+			setTargetStatus(targetStatus, targetObj)
 		}
 	}
 
@@ -331,24 +353,8 @@ func checkAllTargetsAreReady(env *v1alpha1.EnvironmentStatus) bool {
 	return true
 }
 
-// getClusterClient retrieves or creates a client for the cluster in question. A `nil` value for the argument indicates the local cluster.
-func (r *PipelineReconciler) getClusterClient(cluster *clusterctrlv1alpha1.GitopsCluster) (client.Client, error) {
-	if cluster == nil {
-		return r.Client, nil
-	}
-	// TODO future: get the secret via the cluster object, connect to remote cluster
-	return nil, fmt.Errorf("remote clusters not supported yet")
-}
-
-// targetObjectKey returns the object key (namespaced name) for a target. The Pipeline is passed in as well as the Target, since the definition can be spread between these specs.
-func targetObjectKey(pipeline *v1alpha1.Pipeline, target *v1alpha1.Target) client.ObjectKey {
-	key := client.ObjectKey{}
-	key.Name = pipeline.Spec.AppRef.Name
-	key.Namespace = target.Namespace
-	return key
-}
-
-// clusterPrefix returns a string naming the cluster containing an app, to prepend to the usual namespace/name format of the app object itself. So that it can be empty, the separator is include in the return value.
+// clusterPrefix returns a string naming the cluster containing an app, to prepend to the usual namespace/name format of the app object itself.
+// So that it can be empty, the separator is include in the return value.
 func clusterPrefix(ref *v1alpha1.CrossNamespaceClusterReference) string {
 	if ref == nil {
 		return ""
@@ -356,10 +362,53 @@ func clusterPrefix(ref *v1alpha1.CrossNamespaceClusterReference) string {
 	return fmt.Sprintf("%s/%s:", ref.Namespace, ref.Name)
 }
 
+// targetObject returns a target object for a target spec, ready to be queried. The Pipeline is passed in as well as the Target,
+// since the definition can be spread between these specs. This is coupled with setTargetStatus because the concrete types returned here
+// must be handled by setTargetStatus.
+func targetObject(pipeline *v1alpha1.Pipeline, target *v1alpha1.Target) (client.Object, error) {
+	var obj unstructured.Unstructured
+	gv, err := schema.ParseGroupVersion(pipeline.Spec.AppRef.APIVersion)
+	if err != nil {
+		return nil, err
+	}
+	gvk := gv.WithKind(pipeline.Spec.AppRef.Kind)
+	obj.GetObjectKind().SetGroupVersionKind(gvk)
+	obj.SetName(pipeline.Spec.AppRef.Name)
+	obj.SetNamespace(target.Namespace)
+	return &obj, nil
+}
+
 // setTargetStatus gets the relevant status from the app object given, and records it in the TargetStatus.
-func setTargetStatus(status *v1alpha1.TargetStatus, target *helmv2.HelmRelease) {
-	status.Revision = target.Status.LastAppliedRevision
-	status.Ready = conditions.IsReady(target.Status.Conditions)
+func setTargetStatus(status *v1alpha1.TargetStatus, targetObject client.Object) {
+	switch obj := targetObject.(type) {
+	case *unstructured.Unstructured:
+		// this assumes it's a Flux-like object; specifically with
+		//   - a Ready condition
+		//   - a .status.lastAppliedRevision
+		conds, ok, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+		if !ok || err != nil {
+			status.Ready = false
+			return
+		}
+		status.Ready = conditions.IsReadyUnstructured(conds)
+
+		lastAppliedRev, ok, err := unstructured.NestedString(obj.Object, "status", "lastAppliedRevision")
+		if !ok || err != nil {
+			// It's not an error to lack a Ready condition (new objects will lack any conditions), and it's not an error to lack a lastAppliedRevision
+			// (maybe it hasn't got that far yet); but it is an error to have a ready condition of true and lack a lastAppliedRevision, since that means
+			// the object is not a usable target.
+			if status.Ready {
+				status.Error = "unable to find .status.lastAppliedRevision in ready target object"
+				status.Ready = false
+				return
+			}
+		} else {
+			status.Revision = lastAppliedRev
+		}
+	default:
+		status.Error = "unable to determine ready status for object"
+		status.Ready = false
+	}
 }
 
 func (r *PipelineReconciler) patchStatus(ctx context.Context, n types.NamespacedName, newStatus v1alpha1.PipelineStatus) error {
@@ -385,19 +434,21 @@ func (r *PipelineReconciler) getCluster(ctx context.Context, p v1alpha1.Pipeline
 	return cluster, nil
 }
 
+// == Setup of indices and static watchers ==
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	// let the `caches` object set up its own indexing etc.
+	if err := r.caches.setupWithManager(mgr); err != nil {
+		return nil
+	}
+
 	const (
 		gitopsClusterIndexKey string = ".spec.environment.ClusterRef" // this is arbitrary, but let's make it suggest what it's indexing.
 	)
 	// Index the Pipelines by the GitopsCluster references they (may) point at.
-	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, gitopsClusterIndexKey,
-		r.indexClusterKind("GitopsCluster")); err != nil {
-		return fmt.Errorf("failed setting index fields: %w", err)
-	}
-
-	// Index the Pipelines by the application references they point at.
-	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, applicationKey /* <- from indexing.go */, r.indexApplication); err != nil {
+	if err := mgr.GetCache().IndexField(context.TODO(), &v1alpha1.Pipeline{}, gitopsClusterIndexKey, r.indexClusterKind("GitopsCluster")); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
@@ -408,13 +459,10 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Pipeline{}).
 		Watches(
-			&source.Kind{Type: &clusterctrlv1alpha1.GitopsCluster{}},
+			&clusterctrlv1alpha1.GitopsCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
 		).
-		Watches(
-			&source.Kind{Type: &helmv2.HelmRelease{}},
-			handler.EnqueueRequestsFromMapFunc(r.requestsForApplication),
-		).
+		WatchesRawSource(&source.Channel{Source: r.appEvents}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 

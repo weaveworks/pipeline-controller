@@ -9,7 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/fluxcd/helm-controller/api/v2beta1"
+	// These aren't needed by the controller, but are useful to have
+	// for creating target objects in test code
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
+	kustomv1 "github.com/fluxcd/kustomize-controller/api/v1"
+
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,6 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
 	"github.com/weaveworks/pipeline-controller/server/strategy"
@@ -109,11 +114,6 @@ func TestMain(m *testing.M) {
 		log.Fatalf("get user kubeconfig failed: %s", err)
 	}
 
-	err = v2beta1.AddToScheme(scheme.Scheme)
-	if err != nil {
-		log.Fatalf("add helm to schema failed: %s", err)
-	}
-
 	err = v1alpha1.AddToScheme(scheme.Scheme)
 	if err != nil {
 		log.Fatalf("add pipelines to schema failed: %s", err)
@@ -122,6 +122,17 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("add GitopsCluster to schema failed: %s", err)
 	}
+
+	err = helmv2.AddToScheme(scheme.Scheme)
+	if err != nil {
+		log.Fatalf("add HelmRelease to schema failed: %s", err)
+	}
+	err = kustomv1.AddToScheme(scheme.Scheme)
+	if err != nil {
+		log.Fatalf("add Kustomization to schema failed: %s", err)
+	}
+
+	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:             scheme.Scheme,
@@ -133,13 +144,13 @@ func TestMain(m *testing.M) {
 
 	eventRecorder = &testEventRecorder{events: map[string][]testEvent{}}
 
-	pipelineReconciler = &PipelineReconciler{
-		Client:       k8sManager.GetClient(),
-		Scheme:       scheme.Scheme,
-		targetScheme: scheme.Scheme,
-		recorder:     eventRecorder,
-		stratReg:     strategy.StrategyRegistry{},
-	}
+	pipelineReconciler = NewPipelineReconciler(
+		k8sManager.GetClient(),
+		scheme.Scheme,
+		"pipelines",
+		eventRecorder,
+		strategy.StrategyRegistry{},
+	)
 	err = pipelineReconciler.SetupWithManager(k8sManager)
 	if err != nil {
 		log.Fatalf("setup pipeline controller failed: %s", err)
