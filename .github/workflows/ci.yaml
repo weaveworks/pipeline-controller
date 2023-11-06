@@ -73,6 +73,8 @@ jobs:
         echo "machine github.com login ${{ github.actor }} password ${{ secrets.BUILD_BOT_TOKEN }}" > ~/.netrc
     - name: Test
       run: make test
+    - name: Check no mod updates
+      run: git diff --exit-code go.mod go.sum go.work.sum
 
   build:
     runs-on: ubuntu-latest
