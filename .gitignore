@@ -23,6 +23,8 @@ testbin/*
 *.swp
 *.swo
 *~
+go.work
+go.work.sum
 
 # credentials used for accessing GitHub during container build
 .netrc
