@@ -32,7 +32,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 .PHONY: all
-all: build
+all: lint test build
 
 ##@ General
 
@@ -116,7 +116,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go --log-level debug
 
 .PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	docker buildx build --secret id=netrc,src=.netrc -t ${IMG} $(DOCKER_BUILD_ARGS) $(DOCKER_BUILD_LABELS) .
 
 .PHONY: docker-push
