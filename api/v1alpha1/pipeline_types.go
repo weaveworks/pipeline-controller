@@ -185,13 +185,40 @@ func (p *PipelineStatus) setWaitingApproval(env string, waitingApproval WaitingA
 
 type EnvironmentStatus struct {
 	WaitingApproval WaitingApproval `json:"waitingApproval,omitempty"`
-	Targets         []TargetStatus  `json:"targets,omitempty"`
+	// +optional
+	Promotion *PromotionStatus `json:"promotion,omitempty"`
+	Targets   []TargetStatus   `json:"targets,omitempty"`
 }
 
 // WaitingApproval holds the environment revision that's currently waiting approval.
 type WaitingApproval struct {
 	// Revision waiting approval.
 	Revision string `json:"revision"`
+}
+
+// PromotionStatus represents the state of an attempted promotion to
+// the enclosing Environment.
+type PromotionStatus struct {
+	Revision          string      `json:"revision"`
+	LastAttemptedTime metav1.Time `json:"lastAttemptedTime"`
+	Succeeded         bool        `json:"succeeded"`
+
+	// +optional
+	PullRequest *PullRequestDetails `json:"pullRequest,omitempty"`
+}
+
+// Pull request states
+const (
+	PullRequestMerged    = "merged"    // Merged into the target branch, yay.
+	PullRequestAbandoned = "abandoned" // Closed without being merged, meaning it (very likely) won't proceed.
+	PullRequestMergeable = "mergeable" // Approved and passed checks, so ready to be merged.
+	PullRequestOpen      = "open"      // Open but not yet ready to be merged.
+)
+
+// PullRequestStatus records the status of an attempted pull request promotion.
+type PullRequestDetails struct {
+	URL   string `json:"url"`
+	State string `json:"state"`
 }
 
 // ClusterAppReference is a fully-qualified target reference. It holds
