@@ -124,17 +124,8 @@ func TestPromotionAlgorithm(t *testing.T) {
 			return true
 		}, "5s", "0.2s").Should(BeTrue())
 
-		// once the environments have been updated, we should also see each has a successful promotion
-		for _, env := range p.Spec.Environments {
-			if env.Name == "dev" {
-				continue
-			}
-			prom := p.Status.Environments[env.Name].Promotion
-			g.Expect(prom).NotTo(BeNil())
-			g.Expect(prom.LastAttemptedTime).NotTo(BeEmpty())
-			g.Expect(prom.Succeeded).To(BeTrue())
-			g.Expect(prom.Revision).To(Equal("v1.0.1"))
-		}
+		// success through to prod
+		checkPromotionSuccess(g, p, versionToPromote, "prod")
 
 		t.Run("triggers another promotion if the app is updated again", func(t *testing.T) {
 			g := testingutils.NewGomegaWithT(t)
@@ -153,6 +144,9 @@ func TestPromotionAlgorithm(t *testing.T) {
 
 				return true
 			}, "5s", "0.2s").Should(BeTrue())
+
+			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+			checkPromotionSuccess(g, p, "v1.0.2", "prod")
 		})
 
 	})
@@ -222,6 +216,19 @@ func TestPromotionAlgorithm(t *testing.T) {
 			return apimeta.FindStatusCondition(p.Status.Conditions, pipelineconditions.PromotionPendingCondition) == nil
 		}).Should(BeTrue())
 	})
+}
+
+func checkPromotionSuccess(g Gomega, pipeline *v1alpha1.Pipeline, revision, lastEnv string) {
+	for _, env := range pipeline.Spec.Environments[1:] { // no promotion in the first env
+		prom := pipeline.Status.Environments[env.Name].Promotion
+		g.Expect(prom).NotTo(BeNil())
+		g.Expect(prom.LastAttemptedTime).NotTo(BeEmpty())
+		g.Expect(prom.Succeeded).To(BeTrue())
+		g.Expect(prom.Revision).To(Equal(revision))
+		if env.Name == lastEnv {
+			return
+		}
+	}
 }
 
 func setAppRevisionAndReadyStatus(ctx context.Context, g Gomega, hr *helmv2.HelmRelease, revision string) {
