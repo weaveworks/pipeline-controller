@@ -107,8 +107,9 @@ func TestPromotionAlgorithm(t *testing.T) {
 		setAppRevisionAndReadyStatus(ctx, g, devApp, versionToPromote)
 
 		// checks if the revision of all target status is v1.0.1
+		var p *v1alpha1.Pipeline
 		g.Eventually(func() bool {
-			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+			p = getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 
 			for _, env := range p.Spec.Environments {
 				if !checkAllTargetsRunRevision(p.Status.Environments[env.Name], versionToPromote) {
@@ -122,6 +123,18 @@ func TestPromotionAlgorithm(t *testing.T) {
 
 			return true
 		}, "5s", "0.2s").Should(BeTrue())
+
+		// once the environments have been updated, we should also see each has a successful promotion
+		for _, env := range p.Spec.Environments {
+			if env.Name == "dev" {
+				continue
+			}
+			prom := p.Status.Environments[env.Name].Promotion
+			g.Expect(prom).NotTo(BeNil())
+			g.Expect(prom.LastAttemptedTime).NotTo(BeEmpty())
+			g.Expect(prom.Succeeded).To(BeTrue())
+			g.Expect(prom.Revision).To(Equal("v1.0.1"))
+		}
 
 		t.Run("triggers another promotion if the app is updated again", func(t *testing.T) {
 			g := testingutils.NewGomegaWithT(t)
