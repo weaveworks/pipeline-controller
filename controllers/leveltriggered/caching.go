@@ -360,7 +360,7 @@ func newGC(caches cachesInterface, logger logr.Logger) *gc {
 }
 
 func (gc *gc) register(key clusterAndGVK) {
-	gc.log.Info("cache key registered for GC", "key", key)
+	gc.log.Info("cache key registered for GC", "key", key.String())
 	gc.queue.Add(key) // NB not rate limited. Though, this is called when the key is introduced, so it shouldn't matter one way or the other.
 }
 
