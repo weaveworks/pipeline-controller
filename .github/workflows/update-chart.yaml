@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Import GPG key for signing commits
         run: |
           echo -n "$GPG_SIGNING_KEY" | gpg --import
@@ -19,24 +19,24 @@ jobs:
         env:
           GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
       - name: bump app version
-        uses: mikefarah/yq@v4.30.4
+        uses: mikefarah/yq@a198f72367ce9da70b564a2cc25399de8e27bf37 # v4.35.2
         with:
           cmd: yq -i '.appVersion = "${{ github.event.registry_package.package_version.container_metadata.tag.name }}"' charts/pipeline-controller/Chart.yaml
       - name: get chart version
         id: get_chart_version
-        uses: mikefarah/yq@v4.30.4
+        uses: mikefarah/yq@a198f72367ce9da70b564a2cc25399de8e27bf37 # v4.35.2
         with:
           cmd: yq '.version' charts/pipeline-controller/Chart.yaml
       - name: increment chart version
         id: inc_chart_version
         run: echo NEW_CHART_VERSION=$(echo ${{ steps.get_chart_version.outputs.result }} | awk -F. -v OFS=. '{print $1,++$2,0}') >> $GITHUB_OUTPUT
       - name: update chart version
-        uses: mikefarah/yq@v4.30.4
+        uses: mikefarah/yq@a198f72367ce9da70b564a2cc25399de8e27bf37 # v4.35.2
         with:
           cmd: yq -i '.version = "${{ steps.inc_chart_version.outputs.NEW_CHART_VERSION }}"' charts/pipeline-controller/Chart.yaml
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@153407881ec5c347639a548ade7d8ad1d6740e38 # v5.0.2
         with:
           token: ${{ secrets.GHCR_TOKEN }}
           commit-message: |
@@ -60,22 +60,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           repository: weaveworks/weave-gitops-enterprise
           token: ${{ secrets.GHCR_TOKEN }}
       - name: Setup Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
         with:
           version: v3.10.1
       - name: Debug
         run: echo '${{ toJSON(github.event) }}'
       - name: Update pipeline-controller chart version
-        uses: mikefarah/yq@v4.30.4
+        uses: mikefarah/yq@a198f72367ce9da70b564a2cc25399de8e27bf37 # v4.35.2
         with:
           cmd: yq -i '(.dependencies[] | select(.name=="pipeline-controller") | .version) |= "${{ github.event.registry_package.package_version.container_metadata.tag.name }}"' charts/mccp/Chart.yaml
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -84,7 +84,7 @@ jobs:
         run: cd ./charts/mccp && helm dependency update
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@153407881ec5c347639a548ade7d8ad1d6740e38 # v5.0.2
         with:
           token: ${{ secrets.GHCR_TOKEN }}
           commit-message: |
