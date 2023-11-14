@@ -137,6 +137,10 @@ type PipelineStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// LatestRevision is the latest revision that's been promoted to the environments.
+	// +optional
+	LatestRevision string `json:"latestRevision,omitempty"`
+
 	// Environments holds environment statuses.
 	// +optional
 	Environments map[string]*EnvironmentStatus `json:"environments"`

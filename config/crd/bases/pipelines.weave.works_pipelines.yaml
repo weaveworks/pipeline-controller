@@ -432,6 +432,10 @@ spec:
                   type: object
                 description: Environments holds environment statuses.
                 type: object
+              latestRevision:
+                description: LatestRevision is the latest revision that's been promoted
+                  to the environments.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
