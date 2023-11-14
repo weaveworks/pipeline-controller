@@ -113,7 +113,7 @@ build: generate fmt vet ## Build manager binary.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go --log-level debug
+	go run ./main.go --enable-level-triggered true --log-level  debug
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
