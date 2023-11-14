@@ -122,6 +122,28 @@ func TestReconcile(t *testing.T) {
 		g.Expect(targetStatus.Revision).To(Equal(appRevision))
 	})
 
+	t.Run("sets the lastestRevision status field", func(t *testing.T) {
+		g := testingutils.NewGomegaWithT(t)
+		name := "pipeline-" + rand.String(5)
+		ns := testingutils.NewNamespace(ctx, g, k8sClient)
+		t.Cleanup(deleteObjectCleanup(ctx, g, ns))
+
+		const appRevision = "v1.0.1"
+
+		hr := createApp(ctx, k8sClient, g, name, ns.Name)
+		setAppRevisionAndReadyStatus(ctx, g, hr, appRevision)
+
+		pipeline := newPipeline(name, ns.Name, nil)
+		g.Expect(k8sClient.Create(ctx, pipeline)).To(Succeed())
+
+		checkCondition(ctx, g, client.ObjectKeyFromObject(pipeline), meta.ReadyCondition, metav1.ConditionTrue, v1alpha1.ReconciliationSucceededReason)
+
+		g.Eventually(func() string {
+			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+			return p.Status.LatestRevision
+		}, "5s", "0.2s").Should(Equal(appRevision))
+	})
+
 	t.Run("promotes revision to all environments", func(t *testing.T) {
 		g := testingutils.NewGomegaWithT(t)
 		mockStrategy := setStrategyRegistry(t, pipelineReconciler)

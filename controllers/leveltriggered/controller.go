@@ -232,6 +232,10 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error removing pending condition: %w", err)
 	}
 
+	if err := r.setLatestRevision(ctx, pipeline, latestRevision); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error setting latest revision: %w", err)
+	}
+
 	for _, env := range pipeline.Spec.Environments[1:] {
 		// if all targets run the latest revision and are ready, we can skip this environment
 		if checkAllTargetsRunRevision(pipeline.Status.Environments[env.Name], latestRevision) && checkAllTargetsAreReady(pipeline.Status.Environments[env.Name]) {
@@ -251,6 +255,23 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PipelineReconciler) setLatestRevision(ctx context.Context, pipeline v1alpha1.Pipeline, revision string) error {
+	pipeline.Status.LatestRevision = revision
+
+	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
+		r.emitEventf(
+			&pipeline,
+			corev1.EventTypeWarning,
+			"SetStatus", "Failed to set LatestRevision status for pipeline %s/%s: %s",
+			pipeline.GetNamespace(), pipeline.GetName(),
+			err,
+		)
+		return err
+	}
+
+	return nil
 }
 
 func (r *PipelineReconciler) setPendingCondition(ctx context.Context, pipeline v1alpha1.Pipeline, reason, message string) error {
