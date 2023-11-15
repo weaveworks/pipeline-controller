@@ -86,9 +86,12 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var unready bool
 
 	for _, env := range pipeline.Spec.Environments {
-		var envStatus v1alpha1.EnvironmentStatus
+		envStatus, ok := pipeline.Status.Environments[env.Name]
+		if !ok {
+			envStatus = &v1alpha1.EnvironmentStatus{}
+		}
 		envStatus.Targets = make([]v1alpha1.TargetStatus, len(env.Targets))
-		envStatuses[env.Name] = &envStatus
+		envStatuses[env.Name] = envStatus
 
 		for i, target := range env.Targets {
 			targetStatus := &envStatus.Targets[i]
@@ -212,7 +215,11 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	firstEnv := pipeline.Spec.Environments[0]
 
-	latestRevision := checkAllTargetsHaveSameRevision(pipeline.Status.Environments[firstEnv.Name])
+	firstEnvStatus, ok := pipeline.Status.Environments[firstEnv.Name]
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("did not find status for environment listed first %q", firstEnv.Name)
+	}
+	latestRevision := checkAllTargetsHaveSameRevision(firstEnvStatus)
 	if latestRevision == "" {
 		// not all targets have the same revision, or have no revision set, so we can't proceed
 		setPendingCondition(&pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to have the same revision")
@@ -223,7 +230,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if !checkAllTargetsAreReady(pipeline.Status.Environments[firstEnv.Name]) {
+	if !checkAllTargetsAreReady(firstEnvStatus) {
 		// not all targets are ready, so we can't proceed
 		setPendingCondition(&pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to be ready")
 		if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
@@ -239,24 +246,47 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	for _, env := range pipeline.Spec.Environments[1:] {
+		envStatus, ok := pipeline.Status.Environments[env.Name]
+		if !ok {
+			return ctrl.Result{}, fmt.Errorf("environment in spec %q does not have a calculated status", env.Name)
+		}
+
 		// if all targets run the latest revision and are ready, we can skip this environment
-		if checkAllTargetsRunRevision(pipeline.Status.Environments[env.Name], latestRevision) && checkAllTargetsAreReady(pipeline.Status.Environments[env.Name]) {
+		if checkAllTargetsRunRevision(envStatus, latestRevision) && checkAllTargetsAreReady(pipeline.Status.Environments[env.Name]) {
 			continue
 		}
 
-		if checkAnyTargetHasRevision(pipeline.Status.Environments[env.Name], latestRevision) {
+		if checkAnyTargetHasRevision(envStatus, latestRevision) {
 			return ctrl.Result{}, nil
 		}
 
-		err := r.promoteLatestRevision(ctx, pipeline, env, latestRevision)
+		promoteErr := r.promoteLatestRevision(ctx, pipeline, env, latestRevision)
+		err := setPromotionStatus(&pipeline, env.Name, latestRevision, promoteErr)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error promoting new version: %w", err)
+			return ctrl.Result{}, fmt.Errorf("error recording promotion status: %w", err)
 		}
 
 		break
 	}
+	if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func setPromotionStatus(pipeline *v1alpha1.Pipeline, env, revision string, promErr error) error {
+	envStatus, ok := pipeline.Status.Environments[env]
+	if !ok {
+		return fmt.Errorf("environment %q not found in status", env)
+	}
+	var prom v1alpha1.PromotionStatus
+	prom.Revision = revision
+	prom.Succeeded = (promErr == nil)
+	prom.LastAttemptedTime = metav1.Now()
+	envStatus.Promotion = &prom
+	pipeline.Status.Environments[env] = envStatus
+	return nil
 }
 
 func setPendingCondition(pipeline *v1alpha1.Pipeline, reason, message string) {

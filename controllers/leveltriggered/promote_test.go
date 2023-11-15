@@ -125,6 +125,7 @@ func TestPromotionAlgorithm(t *testing.T) {
 		}, "5s", "0.2s").Should(BeTrue())
 
 		// success through to prod
+		p = getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 		checkPromotionSuccess(g, p, versionToPromote, "prod")
 
 		t.Run("triggers another promotion if the app is updated again", func(t *testing.T) {
@@ -148,7 +149,6 @@ func TestPromotionAlgorithm(t *testing.T) {
 			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 			checkPromotionSuccess(g, p, "v1.0.2", "prod")
 		})
-
 	})
 
 	t.Run("sets PipelinePending condition", func(t *testing.T) {
@@ -222,7 +222,7 @@ func checkPromotionSuccess(g Gomega, pipeline *v1alpha1.Pipeline, revision, last
 	for _, env := range pipeline.Spec.Environments[1:] { // no promotion in the first env
 		prom := pipeline.Status.Environments[env.Name].Promotion
 		g.Expect(prom).NotTo(BeNil())
-		g.Expect(prom.LastAttemptedTime).NotTo(BeEmpty())
+		g.Expect(prom.LastAttemptedTime).NotTo(BeZero())
 		g.Expect(prom.Succeeded).To(BeTrue())
 		g.Expect(prom.Revision).To(Equal(revision))
 		if env.Name == lastEnv {
