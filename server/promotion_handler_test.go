@@ -11,8 +11,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	events "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
