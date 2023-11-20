@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/fluxcd/pkg/runtime/patch"
 	clusterctrlv1alpha1 "github.com/weaveworks/cluster-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -78,6 +78,9 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// Stop reconciliation as the object is being deleted
 		return ctrl.Result{}, nil
 	}
+
+	patcher := patch.NewSerialPatcher(&pipeline, r.Client)
+	withFieldOwner := patch.WithFieldOwner(r.ControllerName)
 
 	envStatuses := map[string]*v1alpha1.EnvironmentStatus{}
 	var unready bool
@@ -190,7 +193,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	pipeline.Status.ObservedGeneration = pipeline.Generation
 	apimeta.SetStatusCondition(&pipeline.Status.Conditions, readyCondition)
 	pipeline.Status.Environments = envStatuses
-	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
+	if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
 		r.emitEventf(
 			&pipeline,
 			corev1.EventTypeWarning,
@@ -212,7 +215,8 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	latestRevision := checkAllTargetsHaveSameRevision(pipeline.Status.Environments[firstEnv.Name])
 	if latestRevision == "" {
 		// not all targets have the same revision, or have no revision set, so we can't proceed
-		if err := r.setPendingCondition(ctx, pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to have the same revision"); err != nil {
+		setPendingCondition(&pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to have the same revision")
+		if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
 			return ctrl.Result{Requeue: true}, fmt.Errorf("error setting pending condition: %w", err)
 		}
 
@@ -221,14 +225,16 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if !checkAllTargetsAreReady(pipeline.Status.Environments[firstEnv.Name]) {
 		// not all targets are ready, so we can't proceed
-		if err := r.setPendingCondition(ctx, pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to be ready"); err != nil {
+		setPendingCondition(&pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to be ready")
+		if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error setting pending condition: %w", err)
 		}
 
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.removePendingCondition(ctx, pipeline); err != nil {
+	removePendingCondition(&pipeline)
+	if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error removing pending condition: %w", err)
 	}
 
@@ -253,31 +259,18 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineReconciler) setPendingCondition(ctx context.Context, pipeline v1alpha1.Pipeline, reason, message string) error {
+func setPendingCondition(pipeline *v1alpha1.Pipeline, reason, message string) {
 	condition := metav1.Condition{
 		Type:    conditions.PromotionPendingCondition,
 		Status:  metav1.ConditionTrue,
 		Reason:  reason,
 		Message: message,
 	}
-
 	apimeta.SetStatusCondition(&pipeline.Status.Conditions, condition)
-
-	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
-		return err
-	}
-
-	return nil
 }
 
-func (r *PipelineReconciler) removePendingCondition(ctx context.Context, pipeline v1alpha1.Pipeline) error {
+func removePendingCondition(pipeline *v1alpha1.Pipeline) {
 	apimeta.RemoveStatusCondition(&pipeline.Status.Conditions, conditions.PromotionPendingCondition)
-
-	if err := r.patchStatus(ctx, client.ObjectKeyFromObject(&pipeline), pipeline.Status); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *PipelineReconciler) promoteLatestRevision(ctx context.Context, pipeline v1alpha1.Pipeline, env v1alpha1.Environment, revision string) error {
@@ -409,17 +402,6 @@ func setTargetStatus(status *v1alpha1.TargetStatus, targetObject client.Object) 
 		status.Error = "unable to determine ready status for object"
 		status.Ready = false
 	}
-}
-
-func (r *PipelineReconciler) patchStatus(ctx context.Context, n types.NamespacedName, newStatus v1alpha1.PipelineStatus) error {
-	var pipeline v1alpha1.Pipeline
-	if err := r.Get(ctx, n, &pipeline); err != nil {
-		return err
-	}
-
-	patch := client.MergeFrom(pipeline.DeepCopy())
-	pipeline.Status = newStatus
-	return r.Status().Patch(ctx, &pipeline, patch, client.FieldOwner(r.ControllerName))
 }
 
 func (r *PipelineReconciler) getCluster(ctx context.Context, p v1alpha1.Pipeline, clusterRef v1alpha1.CrossNamespaceClusterReference) (*clusterctrlv1alpha1.GitopsCluster, error) {

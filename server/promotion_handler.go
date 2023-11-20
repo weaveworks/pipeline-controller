@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/fluxcd/pkg/runtime/events"
+	events "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
