@@ -97,7 +97,10 @@ func TestRemoteTargets(t *testing.T) {
 		// the application hasn't been created, so we expect "not found"
 		p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 		g.Expect(getTargetStatus(g, p, "test", 0).Ready).NotTo(BeTrue())
-		g.Expect(getTargetStatus(g, p, "test", 0).Error).To(ContainSubstring("not found"))
+		// we can see "target cluster client not synced" before "not found"
+		g.Eventually(func() string {
+			return getTargetStatus(g, p, "test", 0).Error
+		}).Should(ContainSubstring("not found"))
 
 		targetNs := corev1.Namespace{}
 		targetNs.Name = ns.Name // newPipeline makes the target namespace the same as the pipeline namespace
