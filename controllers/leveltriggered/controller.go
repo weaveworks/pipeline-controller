@@ -15,10 +15,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -240,9 +242,10 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	removePendingCondition(&pipeline)
-	if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error removing pending condition: %w", err)
+	if removePendingCondition(&pipeline) {
+		if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing pending condition: %w", err)
+		}
 	}
 
 	for _, env := range pipeline.Spec.Environments[1:] {
@@ -256,11 +259,15 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			continue
 		}
 
-		if checkAnyTargetHasRevision(envStatus, latestRevision) {
-			return ctrl.Result{}, nil
+		// otherwise: if there's a promotion recorded, we can stop here.
+		if envStatus.Promotion != nil && envStatus.Promotion.Revision == latestRevision {
+			logger.Info("promotion already recorded", "env", env.Name, "revision", latestRevision)
+			break
 		}
 
+		// other-otherwise: attempt a promotion
 		promoteErr := r.promoteLatestRevision(ctx, pipeline, env, latestRevision)
+		logger.Info("promoting env", "env", env.Name, "revision", latestRevision)
 		err := setPromotionStatus(&pipeline, env.Name, latestRevision, promoteErr)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error recording promotion status: %w", err)
@@ -299,8 +306,12 @@ func setPendingCondition(pipeline *v1alpha1.Pipeline, reason, message string) {
 	apimeta.SetStatusCondition(&pipeline.Status.Conditions, condition)
 }
 
-func removePendingCondition(pipeline *v1alpha1.Pipeline) {
-	apimeta.RemoveStatusCondition(&pipeline.Status.Conditions, conditions.PromotionPendingCondition)
+func removePendingCondition(pipeline *v1alpha1.Pipeline) bool {
+	ok := apimeta.FindStatusCondition(pipeline.Status.Conditions, conditions.PromotionPendingCondition) != nil
+	if ok {
+		apimeta.RemoveStatusCondition(&pipeline.Status.Conditions, conditions.PromotionPendingCondition)
+	}
+	return ok
 }
 
 func (r *PipelineReconciler) promoteLatestRevision(ctx context.Context, pipeline v1alpha1.Pipeline, env v1alpha1.Environment, revision string) error {
@@ -327,16 +338,6 @@ func (r *PipelineReconciler) promoteLatestRevision(ctx context.Context, pipeline
 	_, err = strat.Promote(ctx, *pipeline.Spec.Promotion, prom)
 
 	return err
-}
-
-func checkAnyTargetHasRevision(env *v1alpha1.EnvironmentStatus, revision string) bool {
-	for _, target := range env.Targets {
-		if target.Revision == revision {
-			return true
-		}
-	}
-
-	return false
 }
 
 func checkAllTargetsRunRevision(env *v1alpha1.EnvironmentStatus, revision string) bool {
@@ -469,7 +470,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Pipeline{}).
+		For(&v1alpha1.Pipeline{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
 			&clusterctrlv1alpha1.GitopsCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),

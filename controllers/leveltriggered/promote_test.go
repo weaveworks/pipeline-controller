@@ -2,6 +2,7 @@ package leveltriggered
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
@@ -40,19 +41,61 @@ func TestPromotionAlgorithm(t *testing.T) {
 	mockStrategy := installMockStrategy(t, pipelineReconciler)
 	mockStrategy.EXPECT().Handles(gomock.Any()).Return(true).AnyTimes()
 
+	// These operations act to assert the property that _a promotion
+	// at a particular revision will not be retried_. This property
+	// holds only if the test cases do not move the pipeline back to a
+	// prior revision. This is something that could happen in normal
+	// operation (i.e., that property would not hold); but avoided in
+	// these test cases, without loss of generality.
+
+	type promotionAt struct {
+		env, version string
+	}
+
+	promoted := map[promotionAt]bool{} // environment+version -> absent=not attempted|false=waiting|true=done
+	completePromotion := func(env, version string) {
+		done, ok := promoted[promotionAt{env, version}]
+		if !ok {
+			panic("completePromotion called for unstarted promotion. This suggests a faulty test case.")
+		}
+		if done {
+			panic("completePromotion called for completed promotion. This suggests a faulty test case")
+		}
+		switch env {
+		case "staging":
+			setAppRevision(ctx, g, stagingApp, version)
+		case "prod":
+			setAppRevision(ctx, g, prodApp, version)
+		default:
+			panic("Unexpected environment. Make sure to setup the pipeline properly in the test.")
+		}
+		fmt.Printf("[DEBUG] complete promotion %s->%s\n", env, version)
+		promoted[promotionAt{env, version}] = true
+	}
+	startPromotion := func(env, version string) {
+		if _, ok := promoted[promotionAt{env, version}]; ok {
+			panic("attempting to replay a promotion " + env + "->" + version + "; this indicates bad code")
+		}
+		fmt.Printf("[DEBUG] start promotion %s->%s\n", env, version)
+		promoted[promotionAt{env, version}] = false
+	}
+	isPromotionStarted := func(env, version string) bool {
+		done, ok := promoted[promotionAt{env, version}]
+		return ok && !done
+	}
 	mockStrategy.EXPECT().
 		Promote(gomock.Any(), gomock.Any(), gomock.Any()).
 		AnyTimes().
 		Do(func(ctx context.Context, p v1alpha1.Promotion, prom strategy.Promotion) {
-			switch prom.Environment.Name {
-			case "staging":
-				setAppRevision(ctx, g, stagingApp, prom.Version)
-			case "prod":
-				setAppRevision(ctx, g, prodApp, prom.Version)
-			default:
-				panic("Unexpected environment. Make sure to setup the pipeline properly in the test.")
-			}
+			startPromotion(prom.Environment.Name, prom.Version)
 		})
+
+	checkAndCompletePromotion := func(g Gomega, env, version string) {
+		g.Eventually(func() bool {
+			return isPromotionStarted(env, version)
+		}).Should(BeTrue())
+		completePromotion(env, version)
+	}
 
 	t.Run("promotes revision to all environments", func(t *testing.T) {
 		g := testingutils.NewGomegaWithT(t)
@@ -105,6 +148,8 @@ func TestPromotionAlgorithm(t *testing.T) {
 
 		// Bumping dev revision to trigger the promotion
 		setAppRevisionAndReadyStatus(ctx, g, devApp, versionToPromote)
+		checkAndCompletePromotion(g, "staging", versionToPromote)
+		checkAndCompletePromotion(g, "prod", versionToPromote)
 
 		// checks if the revision of all target status is v1.0.1
 		var p *v1alpha1.Pipeline
@@ -129,25 +174,27 @@ func TestPromotionAlgorithm(t *testing.T) {
 		checkPromotionSuccess(g, p, versionToPromote, "prod")
 
 		t.Run("triggers another promotion if the app is updated again", func(t *testing.T) {
+			const newVersion = "v1.0.2"
 			g := testingutils.NewGomegaWithT(t)
 			// Bumping dev revision to trigger the promotion
-			setAppRevisionAndReadyStatus(ctx, g, devApp, "v1.0.2")
+			setAppRevisionAndReadyStatus(ctx, g, devApp, newVersion)
+			checkAndCompletePromotion(g, "staging", newVersion)
+			checkAndCompletePromotion(g, "prod", newVersion)
 
-			// checks if the revision of all target status is v1.0.2
+			// checks if the revision of all target status is the new version
 			g.Eventually(func() bool {
 				p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 
 				for _, env := range p.Spec.Environments {
-					if !checkAllTargetsRunRevision(p.Status.Environments[env.Name], "v1.0.2") {
+					if !checkAllTargetsRunRevision(p.Status.Environments[env.Name], newVersion) {
 						return false
 					}
 				}
-
 				return true
 			}, "5s", "0.2s").Should(BeTrue())
 
 			p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
-			checkPromotionSuccess(g, p, "v1.0.2", "prod")
+			checkPromotionSuccess(g, p, newVersion, "prod")
 		})
 	})
 
