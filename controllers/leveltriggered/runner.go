@@ -6,17 +6,22 @@ import (
 	"sync"
 )
 
-// This is a dead simple way to run things using a manager's context as a base, so that they will
-// get shut down when the manager does. It must be constructed with `newRunner`, and added to a manager:
+// ctrl.Manager makes sure everything that is `Add`ed is started with a context, and cancels the context
+// to signal shutdown. But: all the runnables added share the same context, so they all get shut down at
+// the same time.
 //
-//     r := newRunner()
+// `runner` is a dead simple way to run things with their own context, using a manager's context as a
+// base, so that they will get shut down when the manager does _and_ you can shut them down individually.
+// It must be constructed with `newRunner`, and added to a manager:
+//
+//     r := newRunner(logger)
 //     mgr.Add(r)
 //
 // then you can use it to run funcs:
 //
-//     cancel := r.run(func(context.Context))
+//     cancel := r.run(string, func(context.Context))
 //
-// The func will be run with its own context derived from the root context supplied by the manager,
+// The func will be run with its own context, derived from the root context supplied by the manager,
 // with the cancel func returned to the caller as shown. This way you can cancel the context yourself,
 // or let it be canceled when the manager shuts down.
 //
