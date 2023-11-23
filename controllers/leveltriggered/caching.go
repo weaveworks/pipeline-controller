@@ -63,7 +63,7 @@ func (c *caches) setupWithManager(mgr ctrl.Manager) error {
 	c.baseLogger = mgr.GetLogger().WithValues("component", "target-cache")
 	c.reader = mgr.GetClient() // this specifically gets the client that has the indexing installed below; i.e., these are coupled.
 
-	c.runner = newRunner()
+	c.runner = newRunner(mgr.GetLogger().WithValues("component", "cache-runner"))
 	if err := mgr.Add(c.runner); err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func (c *caches) watchTargetAndGetReader(ctx context.Context, clusterObject *clu
 				return nil, false, err
 			}
 
-			cancel := c.runner.run(func(ctx context.Context) {
+			cancel := c.runner.run("cache-"+cacheKey.String(), func(ctx context.Context) {
 				if err := ca.Start(ctx); err != nil {
 					logger.Error(err, "cache exited with error")
 				}
@@ -373,6 +373,7 @@ func (gc *gc) loop() {
 	for {
 		item, shutdown := gc.queue.Get()
 		if shutdown {
+			gc.log.Info("exiting cache GC loop")
 			return
 		}
 		key, ok := item.(clusterAndGVK)

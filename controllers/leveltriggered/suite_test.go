@@ -176,11 +176,13 @@ func TestMain(m *testing.M) {
 
 	cancel()
 	wg.Wait()
+	log.Println("manager exited")
 
 	err = testEnv.Stop()
 	if err != nil {
-		log.Fatalf("stoping test env failed: %s", err)
+		log.Fatalf("stopping test env failed: %s", err)
 	}
+	log.Println("test env stopped")
 
 	os.Exit(retCode)
 }
