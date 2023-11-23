@@ -44,13 +44,18 @@ type caches struct {
 	runner             *runner
 }
 
-func newCaches(events chan event.GenericEvent, targetScheme *runtime.Scheme) *caches {
+func newCaches(targetScheme *runtime.Scheme) *caches {
+	events := make(chan event.GenericEvent)
 	return &caches{
 		targetScheme: targetScheme,
 		events:       events,
 		cachesMap:    make(map[clusterAndGVK]cacheAndCancel),
 		cachesMu:     &sync.Mutex{},
 	}
+}
+
+func (c *caches) appEvents() <-chan event.GenericEvent {
+	return c.events
 }
 
 func (c *caches) setupWithManager(mgr ctrl.Manager) error {
