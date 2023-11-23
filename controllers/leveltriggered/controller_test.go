@@ -139,7 +139,10 @@ func TestReconcile(t *testing.T) {
 		// the application hasn't been created, so we expect "not found"
 		p := getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 		g.Expect(getTargetStatus(g, p, "test", 0).Ready).NotTo(BeTrue())
-		g.Expect(getTargetStatus(g, p, "test", 0).Error).To(ContainSubstring("not found"))
+		g.Eventually(func() string {
+			p = getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
+			return getTargetStatus(g, p, "test", 0).Error
+		}, "2s").Should(ContainSubstring("not found"))
 
 		// FIXME create the app
 		app := kustomv1.Kustomization{

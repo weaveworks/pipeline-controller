@@ -215,6 +215,11 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		pipeline.GetNamespace(), pipeline.GetName(),
 	)
 
+	// If it's not ready, we can't make any promotion decisions. Requeue, presuming backoff.
+	if unready {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	firstEnv := pipeline.Spec.Environments[0]
 
 	firstEnvStatus, ok := pipeline.Status.Environments[firstEnv.Name]
@@ -470,7 +475,9 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Pipeline{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&v1alpha1.Pipeline{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(
 			&clusterctrlv1alpha1.GitopsCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
