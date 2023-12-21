@@ -34,6 +34,8 @@ var kubeConfig []byte
 var eventRecorder *testEventRecorder
 var pipelineReconciler *PipelineReconciler
 
+var envsToStop []*envtest.Environment
+
 type testEvent struct {
 	object    runtime.Object
 	eventType string
@@ -100,6 +102,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("starting test env failed: %s", err)
 	}
+	envsToStop = append(envsToStop, testEnv)
 
 	user, err := testEnv.ControlPlane.AddUser(envtest.User{
 		Name:   "envtest-admin",
@@ -176,11 +179,20 @@ func TestMain(m *testing.M) {
 
 	cancel()
 	wg.Wait()
+	log.Println("manager exited")
 
-	err = testEnv.Stop()
-	if err != nil {
-		log.Fatalf("stoping test env failed: %s", err)
+	var failedToStopEnvs bool
+	for _, env := range envsToStop {
+		err = env.Stop()
+		if err != nil {
+			failedToStopEnvs = true
+			log.Printf("stopping test env failed: %s\n", err)
+		}
+	}
+	if failedToStopEnvs {
+		log.Fatalf("failed to stop all test envs")
 	}
 
+	log.Println("test envs stopped")
 	os.Exit(retCode)
 }

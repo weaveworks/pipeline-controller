@@ -163,7 +163,7 @@ func TestMain(m *testing.M) {
 
 	err = testEnv.Stop()
 	if err != nil {
-		log.Fatalf("stoping test env failed: %s", err)
+		log.Fatalf("stopping test env failed: %s", err)
 	}
 
 	os.Exit(retCode)

@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -34,13 +33,9 @@ type PipelineReconciler struct {
 	caches         *caches
 	recorder       record.EventRecorder
 	stratReg       strategy.StrategyRegistry
-
-	appEvents chan event.GenericEvent
 }
 
 func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName string, eventRecorder record.EventRecorder, stratReg strategy.StrategyRegistry) *PipelineReconciler {
-	appEvents := make(chan event.GenericEvent)
-
 	// this is empty because we're going to use unstructured.Unstructured objects to support arbitrary types.
 	// If something changed and we wanted typed objects, this scheme would need to have those registered.
 	targetScheme := runtime.NewScheme()
@@ -51,8 +46,7 @@ func NewPipelineReconciler(c client.Client, s *runtime.Scheme, controllerName st
 		recorder:       eventRecorder,
 		ControllerName: controllerName,
 		stratReg:       stratReg,
-		caches:         newCaches(appEvents, targetScheme),
-		appEvents:      appEvents,
+		caches:         newCaches(targetScheme),
 	}
 	return pc
 }
@@ -444,7 +438,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&clusterctrlv1alpha1.GitopsCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
 		).
-		WatchesRawSource(&source.Channel{Source: r.appEvents}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.caches.appEvents()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 

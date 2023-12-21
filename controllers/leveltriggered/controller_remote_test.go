@@ -33,6 +33,7 @@ func TestRemoteTargets(t *testing.T) {
 	if err != nil {
 		t.Error("starting leaf test env failed", err)
 	}
+	envsToStop = append(envsToStop, leafEnv)
 
 	user, err := leafEnv.ControlPlane.AddUser(envtest.User{
 		Name:   "leaf-admin",
