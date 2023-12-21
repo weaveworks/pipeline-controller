@@ -353,6 +353,34 @@ spec:
               environments:
                 additionalProperties:
                   properties:
+                    promotion:
+                      description: PromotionStatus represents the state of an attempted
+                        promotion to the enclosing Environment.
+                      properties:
+                        lastAttemptedTime:
+                          format: date-time
+                          type: string
+                        pullRequest:
+                          description: PullRequestStatus records the status of an
+                            attempted pull request promotion.
+                          properties:
+                            state:
+                              type: string
+                            url:
+                              type: string
+                          required:
+                          - state
+                          - url
+                          type: object
+                        revision:
+                          type: string
+                        succeeded:
+                          type: boolean
+                      required:
+                      - lastAttemptedTime
+                      - revision
+                      - succeeded
+                      type: object
                     targets:
                       items:
                         description: TargetStatus represents the status of an application

@@ -99,6 +99,7 @@ func TestRemoteTargets(t *testing.T) {
 		g.Expect(getTargetStatus(g, p, "test", 0).Ready).NotTo(BeTrue())
 		// we can see "target cluster client not synced" before "not found"
 		g.Eventually(func() string {
+			p = getPipeline(ctx, g, client.ObjectKeyFromObject(pipeline))
 			return getTargetStatus(g, p, "test", 0).Error
 		}).Should(ContainSubstring("not found"))
 

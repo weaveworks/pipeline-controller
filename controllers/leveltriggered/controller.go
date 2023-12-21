@@ -15,10 +15,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/weaveworks/pipeline-controller/api/v1alpha1"
@@ -86,9 +88,12 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var unready bool
 
 	for _, env := range pipeline.Spec.Environments {
-		var envStatus v1alpha1.EnvironmentStatus
+		envStatus, ok := pipeline.Status.Environments[env.Name]
+		if !ok {
+			envStatus = &v1alpha1.EnvironmentStatus{}
+		}
 		envStatus.Targets = make([]v1alpha1.TargetStatus, len(env.Targets))
-		envStatuses[env.Name] = &envStatus
+		envStatuses[env.Name] = envStatus
 
 		for i, target := range env.Targets {
 			targetStatus := &envStatus.Targets[i]
@@ -210,9 +215,18 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		pipeline.GetNamespace(), pipeline.GetName(),
 	)
 
+	// If it's not ready, we can't make any promotion decisions. Requeue, presuming backoff.
+	if unready {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	firstEnv := pipeline.Spec.Environments[0]
 
-	latestRevision := checkAllTargetsHaveSameRevision(pipeline.Status.Environments[firstEnv.Name])
+	firstEnvStatus, ok := pipeline.Status.Environments[firstEnv.Name]
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("did not find status for environment listed first %q", firstEnv.Name)
+	}
+	latestRevision := checkAllTargetsHaveSameRevision(firstEnvStatus)
 	if latestRevision == "" {
 		// not all targets have the same revision, or have no revision set, so we can't proceed
 		setPendingCondition(&pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to have the same revision")
@@ -223,7 +237,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if !checkAllTargetsAreReady(pipeline.Status.Environments[firstEnv.Name]) {
+	if !checkAllTargetsAreReady(firstEnvStatus) {
 		// not all targets are ready, so we can't proceed
 		setPendingCondition(&pipeline, v1alpha1.EnvironmentNotReadyReason, "Waiting for all targets to be ready")
 		if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
@@ -233,30 +247,58 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	removePendingCondition(&pipeline)
-	if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error removing pending condition: %w", err)
+	if removePendingCondition(&pipeline) {
+		if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing pending condition: %w", err)
+		}
 	}
 
 	for _, env := range pipeline.Spec.Environments[1:] {
+		envStatus, ok := pipeline.Status.Environments[env.Name]
+		if !ok {
+			return ctrl.Result{}, fmt.Errorf("environment in spec %q does not have a calculated status", env.Name)
+		}
+
 		// if all targets run the latest revision and are ready, we can skip this environment
-		if checkAllTargetsRunRevision(pipeline.Status.Environments[env.Name], latestRevision) && checkAllTargetsAreReady(pipeline.Status.Environments[env.Name]) {
+		if checkAllTargetsRunRevision(envStatus, latestRevision) && checkAllTargetsAreReady(pipeline.Status.Environments[env.Name]) {
 			continue
 		}
 
-		if checkAnyTargetHasRevision(pipeline.Status.Environments[env.Name], latestRevision) {
-			return ctrl.Result{}, nil
+		// otherwise: if there's a promotion recorded, we can stop here.
+		if envStatus.Promotion != nil && envStatus.Promotion.Revision == latestRevision {
+			logger.Info("promotion already recorded", "env", env.Name, "revision", latestRevision)
+			break
 		}
 
-		err := r.promoteLatestRevision(ctx, pipeline, env, latestRevision)
+		// other-otherwise: attempt a promotion
+		promoteErr := r.promoteLatestRevision(ctx, pipeline, env, latestRevision)
+		logger.Info("promoting env", "env", env.Name, "revision", latestRevision)
+		err := setPromotionStatus(&pipeline, env.Name, latestRevision, promoteErr)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error promoting new version: %w", err)
+			return ctrl.Result{}, fmt.Errorf("error recording promotion status: %w", err)
 		}
 
 		break
 	}
+	if err := patcher.Patch(ctx, &pipeline, withFieldOwner); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func setPromotionStatus(pipeline *v1alpha1.Pipeline, env, revision string, promErr error) error {
+	envStatus, ok := pipeline.Status.Environments[env]
+	if !ok {
+		return fmt.Errorf("environment %q not found in status", env)
+	}
+	var prom v1alpha1.PromotionStatus
+	prom.Revision = revision
+	prom.Succeeded = (promErr == nil)
+	prom.LastAttemptedTime = metav1.Now()
+	envStatus.Promotion = &prom
+	pipeline.Status.Environments[env] = envStatus
+	return nil
 }
 
 func setPendingCondition(pipeline *v1alpha1.Pipeline, reason, message string) {
@@ -269,8 +311,12 @@ func setPendingCondition(pipeline *v1alpha1.Pipeline, reason, message string) {
 	apimeta.SetStatusCondition(&pipeline.Status.Conditions, condition)
 }
 
-func removePendingCondition(pipeline *v1alpha1.Pipeline) {
-	apimeta.RemoveStatusCondition(&pipeline.Status.Conditions, conditions.PromotionPendingCondition)
+func removePendingCondition(pipeline *v1alpha1.Pipeline) bool {
+	ok := apimeta.FindStatusCondition(pipeline.Status.Conditions, conditions.PromotionPendingCondition) != nil
+	if ok {
+		apimeta.RemoveStatusCondition(&pipeline.Status.Conditions, conditions.PromotionPendingCondition)
+	}
+	return ok
 }
 
 func (r *PipelineReconciler) promoteLatestRevision(ctx context.Context, pipeline v1alpha1.Pipeline, env v1alpha1.Environment, revision string) error {
@@ -297,16 +343,6 @@ func (r *PipelineReconciler) promoteLatestRevision(ctx context.Context, pipeline
 	_, err = strat.Promote(ctx, *pipeline.Spec.Promotion, prom)
 
 	return err
-}
-
-func checkAnyTargetHasRevision(env *v1alpha1.EnvironmentStatus, revision string) bool {
-	for _, target := range env.Targets {
-		if target.Revision == revision {
-			return true
-		}
-	}
-
-	return false
 }
 
 func checkAllTargetsRunRevision(env *v1alpha1.EnvironmentStatus, revision string) bool {
@@ -439,7 +475,9 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Pipeline{}).
+		For(&v1alpha1.Pipeline{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(
 			&clusterctrlv1alpha1.GitopsCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForCluster(gitopsClusterIndexKey)),
