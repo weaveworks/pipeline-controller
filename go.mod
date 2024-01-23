@@ -8,7 +8,7 @@ replace gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b => gopkg.in/yaml.v3 
 
 require (
 	github.com/fluxcd/go-git-providers v0.14.0
-	github.com/fluxcd/helm-controller/api v0.25.0
+	github.com/fluxcd/helm-controller/api v0.26.0
 	github.com/fluxcd/image-automation-controller v0.26.0
 	github.com/fluxcd/kustomize-controller/api v1.1.0
 	github.com/fluxcd/pkg/apis/event v0.5.2
